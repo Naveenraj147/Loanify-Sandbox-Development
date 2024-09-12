@@ -1,0 +1,515 @@
+<apex:page controller="DealerPortalController" showHeader="false" sidebar="false" lightningStylesheets="false" standardStylesheets="false" docType="html-5.0" applyBodyTag="false" cache="false">
+    <apex:slds />
+    <style>
+        @media only screen and (min-width: 900px) {
+        form{
+            height: 90vh;
+            user-scalable: no;
+        }
+        .custom-select {
+            text-align: center;
+            justify-content: center;
+            font-size: 20px;
+            top: 10px;
+            margin: 10px 0;
+            font-family: sans-serif;
+            color: black;
+            font-weight: bold;
+            border: 1px solid black;
+            border-radius: 5px;
+            padding: 5px;
+            transition: border-color 0.3s ease;
+        }
+
+        .custom-select:focus {
+            border-color: #32CD32; /* Change this to your desired color */
+            outline: none; /* Remove the default outline */
+        }
+        
+        .logo {
+            max-width: 350px; 
+            height: auto;
+        }
+        .logo-container {
+            text-align: left;
+            margin-top: 20px;
+            padding: 10px; 
+            padding-left: 20px; 
+            background-color: #fff;
+            display: flex;
+            border-radius: 5px;
+            font-family: sans-serif;
+        }
+        .chat-container {
+            width: 80%;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+        }
+        .chat-box {
+            height: 60vh;
+            overflow-y: scroll;
+            border-bottom: 1px solid #ccc;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-message {
+            max-width: 75%; 
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            color: #fff;
+            display: inline-block; 
+            word-wrap: break-word; 
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            font-family: sans-serif;
+        }
+        .chat-message-sender {
+        <!-- font-weight: bold;-->
+            font-size: 0.8em;
+        }
+        .chat-message-body {
+            margin: 5px 0;
+        }
+        .chat-message-time {
+            font-size: 0.8em;
+            color: #ffffff;
+        }
+        .dealer-message {
+        background-color: #61c985; /* #75dd99;*/ 
+            align-self: flex-end;
+            margin-left: auto;
+            text-align: right;
+        }
+        .member-message {
+            background-color:#60B9C4; /*#74cdd8;  Blue color for Member response */
+            align-self: flex-start;
+            margin-right: auto;
+            text-align: left;
+        }
+        .chat-input {
+            display: flex;
+            margin-top: 10px;
+            align-items: center;
+        }
+        .chat-input textarea {
+            resize: none;
+            padding: 5px;
+            font-size: large;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            flex-grow: 1;
+            height: 40px; 
+        }
+        .chat-select-container {
+            /* display: flex;
+            flex-direction: column; */ 
+            padding: 5px;
+            align-items: center;
+            height: 40px;
+            margin: 0 auto; /*Center horizontally with respect to parent */
+        }
+        .chat-select-label{
+            font-family: sans-serif;
+            text-align: center;
+            font-size: 14px;
+        }
+        .chat-input button {
+            align-self: flex-end;
+            padding: 5px 10px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+            cursor: pointer;
+            height: 30px; 
+        }
+        .top-right {
+            position: absolute;
+            top: 25px;
+            right:60px;
+            color: black;
+            /*font-weight: bold;*/
+            margin: 10px; /* Optional: Adjust as needed */
+            padding: 10px; /* Optional: Adjust as needed */
+            
+        }
+        .centered {
+            display: flex;
+            justify-content: center;
+            font-size: 20px;
+            top: 10px;
+            margin: 10px 0;
+            font-family: sans-serif;
+            color: black;
+        	font-weight: bold;
+        }
+
+     }
+        @media only screen and (max-width: 900px) {
+        form{
+            height: 80vh !important;
+            user-scalable: no;
+        }
+        .logo {
+            max-width: 350px; 
+            height: auto;
+        }
+        .logo-container {
+            text-align: left;
+            margin-top: 20px;
+            padding: 10px; 
+            padding-left: 20px; 
+            background-color: #fff;
+            display: flex;
+            border-radius: 5px;
+            font-family: sans-serif;
+        }
+            
+        
+        .chat-container {
+            width: 90%;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+        }
+        .chat-box {
+            max-height:70vh;
+            min-height:70vh;
+            overflow-y: scroll;
+            border-bottom: 1px solid #ccc;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-message {
+            max-width: 75%;
+            min-width: 75%;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            color: #fff;
+            display: inline-block; 
+            word-wrap: break-word; 
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            font-family: sans-serif;
+        }
+        .chat-message-sender {
+        <!-- font-weight: bold;
+            font-size:  0.7em;-->
+            font-size:  large;
+        }
+        .chat-message-body {
+            margin: 2px 0;
+        }
+        .chat-message-time {
+             <!--font-size: 0.7em;-->
+            font-size:  large;
+            color: #ffffff;
+        }
+        .dealer-message {
+            background-color: #61c985; /* #75dd99;*/ 
+            align-self: flex-end;
+            margin-left: auto;
+            text-align: right;
+            font-size: 2em;
+        }
+        .member-message {
+            background-color:#60B9C4; /*#74cdd8;  Blue color for Member response */
+            align-self: flex-start;
+            margin-right: auto;
+            text-align: left;
+            font-size: 2em;
+        }
+        .chat-input {
+            display: flex;
+            margin-top: 10px;
+            align-items: center;
+        }
+        .chat-input textarea {
+            resize: none;
+            padding: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            height: 60px; 
+            font-size: xx-large;
+            width: 65%;
+        }
+        .chat-select-container {
+            /* display: flex;
+            flex-direction: column; */ 
+            padding:  -2px 5px 5px 5px;
+            align-items: center;
+            height: 40px;
+            width: 20%;
+            margin: 0px;
+            text-align: center;
+        // margin: 0 auto; /*Center horizontally with respect to parent */
+        }
+        .chat-select-label{
+            font-family: sans-serif;
+            text-align: center;
+            font-size: large;
+        }
+        .chat-select{
+            width: 90%;
+            font-size: large;
+        }
+        .chat-input button {
+            align-self: flex-end;
+            padding: 5px 10px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+            cursor: pointer;
+            height: 30px; 
+        }
+        .top-right {
+            position: absolute;
+            top: 25px;
+            right:60px;
+            color: Black;
+            /*font-weight: bold;*/
+            margin: 10px; /* Optional: Adjust as needed */
+            padding: 10px; /* Optional: Adjust as needed */
+            
+        }
+        .centered {
+            display: flex;
+            justify-content: center;
+            font-size: 25px;
+            top: 10px;
+            margin: 10px 0;
+            font-family: sans-serif;
+            color: black;
+        	font-weight: bold;
+        }
+
+            
+            
+            .chat-input button {
+                height: 35px;
+            }
+        }
+        @media only screen and (max-width: 400px) {
+        .member-message {
+            background-color: red;     /* #60B9C4; #74cdd8;  Blue color for Member response */
+            align-self: flex-start;
+            margin-right: auto;
+            text-align: left;
+            font-size: 2em;
+        }
+        .top-right {
+            position: absolute;
+            top: 25px;
+            right:60px;
+            color: blue;
+            /*font-weight: bold;*/
+            margin: 10px; /* Optional: Adjust as needed */
+            padding: 10px; /* Optional: Adjust as needed */
+            
+        }
+        }
+    </style>
+    <script>
+        function formatTime(dateString) {
+            const date = new Date(dateString);
+            const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Chicago', timeZoneName: 'short' };
+            return date.toLocaleString('en-US', options).replace(',','');
+        }
+        function scrollToBottom() {
+            var conversationPanel = document.getElementById('conversationPanel');
+            conversationPanel.scrollTop = conversationPanel.scrollHeight;
+        }
+        // Ensure scrollToBottom is called on initial load
+        document.addEventListener("DOMContentLoaded", function() {
+            formatMessages();
+            scrollToBottom();
+        });
+        // Ensure scrollToBottom is called after every AJAX request (such as reRender)
+        document.addEventListener("apexready", function() {
+            formatMessages();
+            scrollToBottom();
+        });
+        
+        function formatMessages() {
+            const messages = document.querySelectorAll('.chat-message-body');
+            messages.forEach(message => {
+                const bodyText = message.getAttribute('data-body');
+                if (bodyText.includes('Dealer Response:')) {
+                    message.innerText = bodyText.substring(bodyText.indexOf('Dealer Response:') + 16);
+                } else if (bodyText.includes('Member Response:')) {
+                    const startIndex = bodyText.indexOf('Member Response:') + 16;
+                    const endIndex = bodyText.indexOf('Please');
+                    message.innerText = bodyText.substring(startIndex, endIndex).trim();
+                } 
+                else if(bodyText.includes('Please find the test drive request details.')){
+                    bodyText.replace('Please find the test drive request details.','');
+                    console.log('bodyText',bodyText);
+                    console.log('bodyText',bodyText.includes('Member Query:'));
+                    console.log('lastIndexOfPlease',bodyText.lastIndexOf('Please'));
+                    const vehicleName=bodyText.substring(bodyText.indexOf('Vehicle Name:') + 13, bodyText.indexOf('Test Drive Date:')).trim();
+                    let testDriveDate='';
+                    if(bodyText.includes('Member Query:')){
+                         testDriveDate=bodyText.substring(bodyText.indexOf('Test Drive Date:') + 16, bodyText.indexOf('Member Query:')).trim();
+                    }
+                    else{
+                         testDriveDate=bodyText.substring(bodyText.indexOf('Test Drive Date:') + 16, bodyText.lastIndexOf('Please')).trim();
+                    }
+                    let memberQuery='';
+                    if(bodyText.includes('Member Query:')){
+                        memberQuery=bodyText.substring(bodyText.indexOf('Member Query:') + 13, bodyText.lastIndexOf('Please')).trim();
+                    }
+                    console.log(vehicleName);
+                    console.log(testDriveDate);
+                    console.log(memberQuery);
+                    message.innerText = 'Can you provide test drive for '+vehicleName+' on '+testDriveDate+'. '+memberQuery;
+                    console.log(message.innerText);
+                }
+                else {
+                    
+                    if(bodyText.includes('Member Query:')){
+                        memberQuery=bodyText.substring(bodyText.indexOf('Member Query:') + 13, bodyText.lastIndexOf('Please')).trim();
+                        message.innerText = memberQuery;
+                    }
+                }
+            });
+            const timeElements = document.querySelectorAll('.chat-message-time');
+            timeElements.forEach(timeElement => {
+                const originalTime = timeElement.textContent;
+                timeElement.textContent = ((formatTime(originalTime)).replace("CDT", "CST")).replace(/^\w{3}\s/, '');;
+                
+            });
+    }
+    function handleKeyPress() {
+        // Check if the key pressed is Enter
+         if (event.key === 'Enter') {
+             
+             if (event.shiftKey) {
+                    // Allow newline by default behavior
+                    return true;
+                 }
+             else{
+                event.preventDefault(); // Prevent the default Enter key behavior
+                console.log('user pressed Enter Key');
+                sendMessage();
+            }
+         }
+       
+    }
+    </script>
+    <apex:form id="chatForm">
+        
+        <apex:actionFunction name="apexPicklistChange" action="{!handlePicklistChange}" reRender="chatForm" oncomplete="formatMessages();"></apex:actionFunction>
+        <meta name="viewport" content="width=device-width, initial-scale=0.5, maximum-scale=0.5"/>
+        <apex:outputPanel rendered="{!RecordId == null && RecordId == ''}">
+        <div class="logo-container" > 
+            <div>
+                <apex:image width="50%" url="{!$Resource.CompanyLogoFastPass}" alt="Logo" />
+            </div>
+            <div class="top-right">
+                <div>
+                    <table>
+                        <tr>
+                            <td Style="font-size: 12px;">Name</td>
+                            <td Style="font-size: 12px;">: </td>
+                            <td Style="font-size: 14px;"> {!vehicleName}</td>
+                            
+                        </tr>
+                        <tr>
+                            <td Style="font-size: 12px;">VIN</td>
+                            <td Style="font-size: 12px;">: </td>
+                            <td Style="font-size: 14px;"> {!vehicleVin}</td>
+                        </tr>
+                        
+                    </table>
+                   <!-- Vehicle Name: {!vehicleName} 
+                VIN: {!vehicleVin}--> </div>
+            </div>
+        </div>
+            </apex:outputPanel>
+     <!--   <apex:outputPanel id="error">
+                <div class="content">
+                    <apex:messages style="width:fit-content;padding-right:20px;padding-top:15px;padding-bottom:15px;text-align:left;Background-color:red;color:white;white-space: pre-line;margin:auto;list-style-type: none;" />
+                </div>
+            </apex:outputPanel>-->
+        <apex:outputPanel rendered="{!showComponent=false}">
+    <apex:define name="body">
+      <center>
+        <apex:panelGrid bgcolor="white" columns="1">
+          <br/>
+          <br/>
+          <apex:panelGrid width="758" cellpadding="0" cellspacing="0" bgcolor="white" columns="1" styleClass="topPanelContainer">
+            <br/>
+            <apex:outputPanel layout="block" styleClass="topPanel">
+              <apex:panelGrid width="758" cellpadding="0" cellspacing="0" bgcolor="white" columns="3">
+                <apex:image url="{!URLFOR($Resource.SiteSamples, 'img/clock.png')}"/>
+                <apex:image url="{!URLFOR($Resource.SiteSamples, 'img/warning.png')}"/>
+                <apex:panelGroup >
+                  <apex:outputText styleClass="title" value="Page Not Found">
+                   <apex:param value="{!$Site.OriginalUrl}"/>
+                  </apex:outputText>
+                  <br/>
+                  <br/>
+                  <apex:outputText value="The page you are looking for does not seem to exist."/>
+                </apex:panelGroup>
+              </apex:panelGrid>
+             </apex:outputPanel>
+            
+          </apex:panelGrid>
+        </apex:panelGrid>
+      </center>
+    </apex:define>
+        </apex:outputPanel>
+        <apex:outputPanel rendered="{!showComponent}">
+            
+        <!-- <div class="centered" rendered="{!RecordId == null && RecordId == ''}"><b>{!requestHeader}</b></div> -->
+            <apex:outputText styleClass="centered" value="{!requestHeader}" rendered="{!RecordId == null && RecordId == ''}"></apex:outputText>
+            <!-- <apex:outputText styleClass="centered" value="Request Type" rendered="{!RecordId != null && RecordId != ''}"></apex:outputText> -->
+            <div style="text-align:center; ">
+                 <apex:outputText value="Request Type  " style="font-size: 20px;" rendered="{!RecordId != null && RecordId != ''}"/>
+                <apex:selectList styleClass="custom-select"  label="Request Type" value="{!type}" size="1" onchange="apexPicklistChange();" rendered="{!RecordId != null && RecordId != ''}" >
+                    <apex:selectOptions value="{!requestOptions}" />
+                </apex:selectList>
+            </div>
+			
+        <div class="chat-container">
+            <div class="chat-box" id="conversationPanel">
+                <apex:repeat value="{!wrapperList}" var="message">
+                    <div class="chat-message {!IF(CONTAINS(message.textBody, 'Dealer Response:'), 'dealer-message', 'member-message')}">
+                        <div class="chat-message-sender">{!message.name}</div>
+                        <div class="chat-message-body" data-body="{!message.textBody}"></div>
+                        <div class="chat-message-time">{!message.createdDate}</div>
+                    </div>
+                </apex:repeat>
+                <apex:outputPanel rendered="{!ISNULL(wrapperList) || wrapperList.size == 0}">
+                    <div style="text-align:Center" >
+                        <p><b>There are no conversations to display.</b></p>
+                    </div>
+                </apex:outputPanel>
+            </div>
+            <div class="chat-input">
+                <apex:inputTextarea value="{!newMessage}" rows="3" cols="50" onkeypress="handleKeyPress();" readonly="{!IF(ISNULL(wrapperList) || wrapperList.size == 0, true, false)}"/>
+                <div class="chat-select-container">
+                    <div class="chat-select-label">Send As</div>
+                    <apex:selectList value="{!selectedDealer}" size="1" styleClass="chat-select">
+                        <apex:selectOptions value="{!dealerOptions}" />
+                    </apex:selectList>
+                </div>
+                <apex:actionFunction name="sendMessage" action="{!sendMessage}" reRender="conversationPanel,chatForm" oncomplete="formatMessages(); scrollToBottom()"/>
+                <apex:commandButton image="{!URLFOR($Resource.SendLogo)}" title="Send" action="{!sendMessage}" reRender="conversationPanel,chatForm" oncomplete="formatMessages(); scrollToBottom()"/>
+            </div>
+        </div>
+            </apex:outputPanel>
+    </apex:form>
+</apex:page>

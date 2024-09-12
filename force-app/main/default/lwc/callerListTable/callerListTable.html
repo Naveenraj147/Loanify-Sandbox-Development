@@ -1,0 +1,173 @@
+<template>
+        <!-- <lightning-card  hide-header="true" > -->
+            <div style="width: auto;height:auto;" class="slds-m-horizontal_small slds-m-vertical_x-small">
+
+                <template if:false={showHistoryPage}>
+
+                <lightning-layout horizontal-align="left" >
+                    <lightning-layout-item class="slds-size_2-of-12">
+                        <lightning-combobox style="width: 121%;" name="progress" variant = "label-hidden" value={filterValue} placeholder="Select Progress"
+                            options={options} onchange={handleChangeFilter}>
+                        </lightning-combobox>
+                    </lightning-layout-item> 
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                   <!-- <lightning-layout-item class="slds-size_1-of-12"></lightning-layout-item> -->
+                    <lightning-layout-item class="slds-size_3-of-12">
+                        <!-- <lightning-input style="margin-top: 18px;" name="enter-search" label="Search" variant = "label-hidden" placeholder="Search this list..."
+                            type="text" onchange={handleChangeSearch} ></lightning-input> -->
+
+                            <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_right">
+                              <lightning-icon size="x-small" class="slds-icon slds-input__icon slds-input__icon_right slds-icon-text-default" icon-name="utility:search"></lightning-icon>
+                              <lightning-input  name="enter-search" label="Search" variant = "label-hidden" placeholder="Search this list..."
+                              type="text" onchange={handleChangeSearch} ></lightning-input>                     
+                        </div>
+                    </lightning-layout-item>
+                   <!-- <lightning-layout-item class="slds-size_2-of-12" //style="margin-top: 17px;">
+                       <div class="slds-form-element">
+                        
+                        <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_right">
+                            <lightning-icon size="x-small" class="slds-icon slds-input__icon slds-input__icon_right slds-icon-text-default" icon-name="utility:search"></lightning-icon>
+                            <input type="text" onchange={handleChangeSearch} id="text-input-id-1" placeholder="Type Text to Search" class="slds-input" />
+                        </div>
+                        <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_right">
+                          <lightning-icon size="x-small" class="slds-icon slds-input__icon slds-input__icon_right slds-icon-text-default" icon-name="utility:search"></lightning-icon>
+                          <lightning-input style="margin-top: 18px;" name="enter-search" label="Search" variant = "label-hidden" placeholder="Search this list..."
+                          type="text" onchange={handleChangeSearch} ></lightning-input>                      </div>
+                    </div> 
+                    Dealer/Branch
+                    </lightning-layout-item>-->
+
+                </lightning-layout>
+                <br/>
+                <div class="slds-scrollable" style="height: auto;max-height:400px ">
+                <table class="slds-table slds-table_cell-buffer slds-table_bordered slds-table_col-bordered">
+                    <thead>
+                    <tr class="slds-line-height_reset">
+                      <!-- <template if:true={isAllContacts}>
+                        <th >Type</th>
+                      </template> -->
+                      <th>{branchOrDealer}</th>
+                      <th>Name</th>
+                      <th style="display:none">Phone</th>
+                      <!-- <th>Dealer Phone</th> -->
+                      <th></th>
+                      <th></th>
+                      <th></th>
+                      <th></th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                      
+                    <template for:each={contactsToDisplay} for:item="each">
+
+                    
+                    <tr key={each.Id} class="slds-hint-parent">
+                      <!-- <template if:true={isAllContacts}>
+                        <th >{each.RecordTypeName}</th>
+                      </template> -->
+                      <td><a onclick={handleOpenRecord} data-id={each.AccountId} >{each.AccountName} </a></td>
+                      <td> <a onclick={handleOpenRecord} data-id={each.Id} >{each.Name}</a></td>
+                      <td style="display:none">
+                        <lightning-click-to-dial 
+                          record-id={each.Id}
+                          value={each.PhoneNumber}
+                          data-id={each.PhoneNumber}> 
+                        </lightning-click-to-dial>
+                      </td>
+                      <!-- <td>
+                        <lightning-click-to-dial onclick={handleMakeCall}
+                          record-id={each.Id}
+                          value={each.AccountPhone}
+                          data-id={each.AccountPhone}> 
+                        </lightning-click-to-dial>
+                      </td> -->
+                      <td style="text-align: center;"><button  class={each.class}  role="button" onclick={handleCallButtonClick} data-id={each.PhoneNumber} data-rowid={each.Id} title={each.PhoneNumber} name ="Call">
+                        <svg class="slds-button__icon slds-icon_small" aria-hidden="true">>
+                            <!-- Include your SVG icon code here -->
+                            <use xlink:href="/_slds/icons/utility-sprite/svg/symbols.svg#call"></use>
+                        </svg>
+                        
+                    </button></td>
+                      <td style="text-align: center;"><button class="button-37" role="button" onclick={handleMailButtonClick} data-id={each.Id} data-rowid={each.Id} name ="Mail" >
+                        <svg class="slds-button__icon slds-icon_small" aria-hidden="true">>
+                            <!-- Include your SVG icon code here -->
+                            <use xlink:href="/_slds/icons/utility-sprite/svg/symbols.svg#email"></use>
+                        </svg>
+                        
+                    </button></td>
+                      <td style="text-align: center;"><button class={each.class} role="button" onclick={handleSMSButtonClick} data-id={each.Id} data-rowid={each.Id}  name ="SMS">
+                        <svg class="slds-button__icon slds-icon_small" aria-hidden="true">>
+                            <!-- Include your SVG icon code here -->
+                            <use xlink:href="/_slds/icons/utility-sprite/svg/symbols.svg#sms"></use>
+                        </svg>
+                        
+                    </button></td>
+                      <td>
+                             <lightning-button-menu
+                            alternative-text="Actions"
+                            icon-name="utility:down"
+                            menu-alignment="right"
+                            size="small"
+                        >
+                            <lightning-menu-item value={each.Id} label="Call History" onclick={handleViewHistory}></lightning-menu-item>
+                        </lightning-button-menu>
+
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+                  </table>
+                </div>
+            </template>
+            <template if:true={showHistoryPage}>
+
+                <nav role="navigation" aria-label="Breadcrumbs">
+                    <ol class="slds-breadcrumb slds-list_horizontal slds-wrap">
+                      <li class="slds-breadcrumb__item" onclick={handleHomeClick}>
+                        <a >Home</a>
+                      </li>
+                      <li class="slds-breadcrumb__item">
+                        &nbsp; {selectedContactName} &nbsp;
+                      </li>
+                      <li class="slds-breadcrumb__item">
+                        &nbsp; Call History
+                      </li>
+                    </ol>
+                  </nav>
+                  <br/>
+                  <table class="slds-table slds-table_cell-buffer slds-table_bordered slds-table_col-bordered">
+                    <thead>
+                    <tr class="slds-line-height_reset">
+                      <th >Date & Time</th>
+                      <th>Duration</th>
+                      <th>Call Type</th>
+                      <th>Call End Status</th>
+                      <th>Voice Call Record</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <template for:each={voiceCalltoDisplay} for:item="each">
+
+                    
+                    <tr key={each.Name} class="slds-hint-parent">
+                      <td>{each.Date}</td>
+                      <td>{each.Minutes}</td>
+                      <td>{each.CallType}</td>
+                      <td>{each.Call_End_Status__c}</td>
+                      <td ><a onclick={handleOpenRecord} data-id={each.Id} >{each.Name}  </a></td>
+                    </tr>
+                </template>
+
+            </tbody>
+                  </table>
+                
+
+            </template>
+            <template if:true={showNoRecords}>
+              <div style="text-align: center;padding:50px; ">
+                No Records Found.
+              </div>
+          </template>
+            </div>
+        <!-- </lightning-card> -->
+    </template>
