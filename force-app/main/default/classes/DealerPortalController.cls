@@ -18,6 +18,7 @@ public class DealerPortalController {
     public String requestHeader{ get; set; }
     public String type{ get; set; }
     public String garageId;
+    public Integer fastpassDealerId;
     private Date linkSharedDate;
     private Map<String,String> dealerNameEmailMap=new Map<String,String>();
     private Map<String,String> emailWithNameMap=new Map<String,String>();
@@ -39,6 +40,7 @@ public class DealerPortalController {
         vehicleName='';
         garageId='';
         type='';
+        fastpassDealerId = null;
         tempConversations.add('Hi this is from controller !!');
         System.debug('Hi');
         // Decrypt and assign the parameters from the URL
@@ -58,6 +60,7 @@ public class DealerPortalController {
             dealerId = (String)paramMapping.get('dealerId');
             vehicleVin = (String)paramMapping.get('vehicleVin');
             vehicleName = (String)paramMapping.get('vehicleName');
+            fastpassDealerId = Integer.valueOf(paramMapping.get('fastpassVehicleId'));
             type = (String)paramMapping.get('type');
             String dateString = (String)paramMapping.get('linkSharedDate');
             garageId = (String)paramMapping.get('garageId');
@@ -67,12 +70,13 @@ public class DealerPortalController {
         }
         if(RecordId != null){
             garageId = RecordId;
-            List<Garage__c> Garage = [SELECT Id, Name, VIN__c, Opportunity__c, Dealer__r.FastPass_Dealer_Id__c FROM Garage__c WHERE Id =:RecordId ]; 
+            List<Garage__c> Garage = [SELECT Id, Name, VIN__c, Opportunity__c, Dealer__r.FastPass_Dealer_Id__c, FastPass_Vehicle_Id__c FROM Garage__c WHERE Id =:RecordId ]; 
             if(Garage.size() > 0){
                 opportunityId = Garage[0].Opportunity__c;
                 dealerId = Garage[0].Dealer__r.FastPass_Dealer_Id__c;
                 vehicleVin = Garage[0].VIN__c;
                 vehicleName = Garage[0].Name;
+                fastpassDealerId = Integer.valueOf((Garage[0].FastPass_Vehicle_Id__c));
                 type = 'testDrive';
             }
             
@@ -173,17 +177,24 @@ public class DealerPortalController {
     }
     
     private void loadConversations() {
-         wrapperList = new List<EmailWrapper>();
+        wrapperList = new List<EmailWrapper>();
         List<String>  duplicateString = new List<String>();
-        String subject = (type == 'testDrive') ? 'Test Drive Requested by '+opportunity.Auto_Shopper__r.Name+' for #'+opportunity.Card_Number__c+' in #'+vehicleVin : 'Query Requested by '+opportunity.Auto_Shopper__r.Name+' for #'+opportunity.Card_Number__c+' in #'+vehicleVin;
-		System.debug('subject :: '+ subject);
+        String subject = (type == 'testDrive') ? 'Test Drive Requested by '+opportunity.Auto_Shopper__r.Name+' for #'+opportunity.Card_Number__c+' in #'+ vehicleVin + ' #' +fastpassDealerId : 'Query Requested by '+opportunity.Auto_Shopper__r.Name+' for #'+opportunity.Card_Number__c+' in #'+vehicleVin; //
+        String subject2 = (type == 'testDrive') ? 'Query Requested by '+opportunity.Auto_Shopper__r.Name+' for #'+opportunity.Card_Number__c+' in #'+ vehicleVin + ' #' +fastpassDealerId : 'Query Requested by '+opportunity.Auto_Shopper__r.Name+' for #'+opportunity.Card_Number__c+' in #'+vehicleVin; //
+        System.debug('subject :: '+ subject);
+        System.debug('fastpassDealerId :: '+ fastpassDealerId);
         if (type == 'testDrive') {
             System.debug('Inside Test Drive');
             requestHeader = 'Test Drive Request';
-            for(EmailMessage each : [SELECT Subject, TextBody,ToAddress, FromAddress, CreatedDate FROM EmailMessage WHERE Subject LIKE :subject AND RelatedToId = :garageId order by CreatedDate]){
+            for(EmailMessage each : [SELECT Subject, TextBody, HtmlBody, ToAddress, FromAddress, CreatedDate FROM EmailMessage WHERE (Subject LIKE :subject OR Subject LIKE :subject2) AND RelatedToId = :garageId order by CreatedDate]){
                 EmailWrapper wrapper = new EmailWrapper();
                
-                wrapper.textBody = each.TextBody;
+                System.debug('Message :: + '+each.TextBody);
+                System.debug('Message HtmlBody :: + '+each.HtmlBody);
+
+                wrapper.textBody = each.HtmlBody.replaceAll('<br/>', '\n').replaceAll('<br />','\n');
+                wrapper.textBody = wrapper.textBody.replaceAll('<[^>]*>', '');
+                wrapper.textBody = wrapper.textBody.replaceAll('&nbsp;', '');
                 wrapper.createdDate = each.CreatedDate;
                 wrapper.fromAddress = each.FromAddress;
                 wrapper.name = emailWithNameMap.get(each.FromAddress);
@@ -196,7 +207,7 @@ public class DealerPortalController {
             }        
         } else if (type == 'askDealer') {
             requestHeader = 'Ask Dealer Request';
-            for(EmailMessage each : [SELECT Subject, TextBody,ToAddress, FromAddress, CreatedDate FROM EmailMessage WHERE Subject LIKE :subject AND RelatedToId = :garageId order by CreatedDate]){
+            for(EmailMessage each : [SELECT Subject, TextBody, HtmlBody, ToAddress, FromAddress, CreatedDate FROM EmailMessage WHERE Subject LIKE :subject AND RelatedToId = :garageId order by CreatedDate]){
                 EmailWrapper wrapper = new EmailWrapper();
                 wrapper.textBody = each.TextBody;
                 wrapper.createdDate = each.CreatedDate;
@@ -240,34 +251,42 @@ public class DealerPortalController {
     public void sendMessage() {
 		System.debug('Send Message is Clicked');
         if (String.isNotBlank(newMessage)) {
-
+            System.debug('Send Message is Clicked :: '+ newMessage );
             // send email Logic 
             EmailMessage newEmail = new EmailMessage();
             System.debug(selectedDealer);
             System.debug(dealerNameEmailMap.get(selectedDealer));
             newEmail.FromAddress=dealerNameEmailMap.get(selectedDealer);
             newEmail.ToAddress = 'invalid@invalid.com';
-            newEmail.Subject = (type == 'testDrive') ? 'Test Drive Requested by '+opportunity.Auto_Shopper__r.Name+' for #'+opportunity.Card_Number__c+' in #'+vehicleVin : 'Query Requested by '+opportunity.Auto_Shopper__r.Name+' for #'+opportunity.Card_Number__c+' in #'+vehicleVin;
+            newEmail.Subject = (type == 'testDrive') ? 'Test Drive Requested by '+opportunity.Auto_Shopper__r.Name+' for #'+opportunity.Card_Number__c+' in #'+vehicleVin + ' #'+fastpassDealerId : 'Query Requested by '+opportunity.Auto_Shopper__r.Name+' for #'+opportunity.Card_Number__c+' in #'+fastpassDealerId;
             newEmail.TextBody = 'Dealer Response: '+newMessage;
             newEmail.HtmlBody = 'Dealer Response: '+newMessage;
             newEmail.RelatedToId = garageId;
+            newEmail.Status = '3'; 
             insert newEmail;
             newMessage = '';
-			
+			System.debug('Send Message is Clicked :: '+ newEmail.TextBody );
+            System.debug('Send Message is Clicked :: '+ newEmail.TextBody );
+
+            System.debug('Send Message is Clicked :: '+ newEmail.HtmlBody );
 			Garage__c garage = new Garage__c();
             garage.Id = garageId;
 
             // Refresh conversations
             if (type == 'testDrive') {
                 garage.Last_Dealer_Response_Test_Drive__c = System.now();
-                for (EmailMessage each : [SELECT Subject, TextBody,ToAddress, FromAddress, CreatedDate FROM EmailMessage WHERE Subject LIKE '%Test Drive Requested%' AND Id = :newEmail.Id ]) {
+                for (EmailMessage each : [SELECT Subject, TextBody,ToAddress, FromAddress, HtmlBody, CreatedDate FROM EmailMessage WHERE Subject LIKE '%Test Drive Requested%' AND Id = :newEmail.Id ]) {
                     EmailWrapper wrapper = new EmailWrapper();
                     wrapper.textBody = each.TextBody;
                     wrapper.createdDate = each.CreatedDate;
                     wrapper.fromAddress = each.FromAddress;
                     wrapper.name = emailWithNameMap.get(each.FromAddress);
                     wrapperList.add(wrapper);
-                    System.debug('wrapper'+wrapper);
+                    System.debug('new wrapper :: '+wrapper);
+                    
+                }
+                for(EmailWrapper each: wrapperList){
+                    System.debug('new wrapper :: '+each);
                 }
                 
             } else if (type == 'askDealer') {
