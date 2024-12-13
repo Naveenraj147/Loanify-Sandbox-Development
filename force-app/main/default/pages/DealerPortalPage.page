@@ -163,7 +163,7 @@
             color: black;
             /*font-weight: bold;*/
             margin: 10px; /* Optional: Adjust as needed */
-            padding: 10px; /* Optional: Adjust as needed */
+            /*padding: 10px;  Optional: Adjust as needed */
             
         }
         .centered {
@@ -308,7 +308,7 @@
             color: Black;
             /*font-weight: bold;*/
             margin: 10px; /* Optional: Adjust as needed */
-            padding: 10px; /* Optional: Adjust as needed */
+            /*padding: 10px;  Optional: Adjust as needed */
             
         }
         .centered {
@@ -328,9 +328,9 @@
                 height: 35px;
             }
         }
-        @media only screen and (max-width: 400px) {
+        @media only screen and (min-width: 320px) {
         .member-message {
-            background-color: red;     /* #60B9C4; #74cdd8;  Blue color for Member response */
+            background-color: #60B9C4;     /* #60B9C4; #74cdd8;  Blue color for Member response */
             align-self: flex-start;
             margin-right: auto;
             text-align: left;
@@ -338,12 +338,50 @@
         }
         .top-right {
             position: absolute;
-            top: 25px;
-            right:60px;
-            color: blue;
+            top: 5px;
+            //right:10px;
+            left: 50%;
+            color: Black;
             /*font-weight: bold;*/
             margin: 10px; /* Optional: Adjust as needed */
-            padding: 10px; /* Optional: Adjust as needed */
+            margin-right: 0px; /* Optional: Adjust as needed */
+            width:48%;
+            margin-top: 22px;
+
+            /*padding: 10px;  Optional: Adjust as needed */
+            
+        }
+        .logo-container {
+            display: inline-block;
+            
+        }
+        .chat-container{
+            margin-top: 11px;
+
+        }
+
+        
+        }
+        @media only screen and (min-width: 960px) {
+        .member-message {
+            background-color: #60B9C4;     /* #60B9C4; #74cdd8;  Blue color for Member response */
+            align-self: flex-start;
+            margin-right: auto;
+            text-align: left;
+            font-size: 1em;
+        }
+        .top-right {
+            position: absolute;
+            top: 25px;
+            right:60px;
+            color: Black;
+            left:72%;
+            width:25%;
+            /*font-weight: bold;*/
+            margin: 10px; /* Optional: Adjust as needed */
+           // margin-right: 0px; /* Optional: Adjust as needed */
+
+            /*padding: 10px;  Optional: Adjust as needed */
             
         }
         }
@@ -404,6 +442,13 @@
                     message.innerText = memberQuery;
                     console.log(message.innerText);
                 }
+                else if(bodyText.includes('Note: Click on the link to REPLY')){
+                let memberQuery='';
+                    if(bodyText.includes('Thanks,')){
+                        memberQuery=bodyText.substring(0, bodyText.indexOf('Thanks,')).trim();
+                    }
+                message.innerText = memberQuery;
+                }
                 else {
                     
                     if(bodyText.includes('Member Query:')){
@@ -432,12 +477,37 @@
                 showBlackout();
                 event.preventDefault(); // Prevent the default Enter key behavior
                 console.log('user pressed Enter Key');
-
+                const textAreaInput2 = document.getElementById('j_id0:chatForm:messageTextarea');
+                console.log('textAreaInput2  ', textAreaInput2.value);
                 sendMessage();
             }
          }
        
     }
+    function qusButtonClick(event,button) {
+    event.preventDefault();
+    console.log('Inside qusButtonClick');
+    //makeEditable();
+    const buttonName = button.name;
+    const textAreaInput = document.getElementById('j_id0:chatForm:messageTextarea');
+    if(buttonName == "Yes"){
+        console.log('Yes Button Clicked');
+        textAreaInput.value = "Yes,";
+    }
+    else{
+        console.log('No Button Clicked');
+        textAreaInput.value = "No,";
+    }
+    console.log('textAreaInput.readonly :: ', textAreaInput);
+    console.log('textAreaInput.readonly :: ', textAreaInput.readonly);
+   // textAreaInput.removeAttribute('disabled');
+   // textAreaInput.disabled = false;
+    const buttonContainer  = document.getElementById('buttonContainer');
+     buttonContainer.style.display = 'none';
+     console.log('buttonName  ', buttonName);
+     
+    }
+
       function showBlackout() {
         document.getElementById('blackout').style.display = 'block';
     }
@@ -467,6 +537,11 @@
                             <td Style="font-size: 12px;">VIN</td>
                             <td Style="font-size: 12px;">: </td>
                             <td Style="font-size: 14px;"> {!vehicleVin}</td>
+                        </tr>
+                        <tr>
+                            <td Style="font-size: 12px;">Stock Number</td>
+                            <td Style="font-size: 12px;">: </td>
+                            <td Style="font-size: 14px;"> {!stockNumber}</td>
                         </tr>
                         
                     </table>
@@ -535,8 +610,45 @@
                     </div>
                 </apex:outputPanel>
             </div>
-            <div class="chat-input">
-                <apex:inputTextarea value="{!newMessage}" rows="3" cols="50" onkeypress="handleKeyPress();" readonly="{!IF(ISNULL(wrapperList) || wrapperList.size == 0, true, false)}"/>
+
+      <apex:outputPanel rendered="{!showButtons}">      
+     <div id="buttonContainer" style="display: flex; align-items: center; gap: 10px; justify-content: flex-front; font-family: Arial, sans-serif; margin-top:1%;">
+    <button 
+        style="
+            background-color: transparent;
+            color: #4CAF50;
+            padding: 6px 20px; /* Reduced height */
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold; /* Bold font */
+        "
+        onclick="qusButtonClick(event, this)"
+        name = "Yes" 
+    >
+        Yes
+    </button>
+    <button 
+        style="
+            background-color: transparent;
+            color: #f44336;
+            padding: 6px 20px; /* Reduced height */
+            border: 2px solid #f44336;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold; /* Bold font */
+        "
+        onclick="qusButtonClick(event, this)"
+        name = "No" 
+    >
+        No
+    </button>
+</div>
+</apex:outputPanel>
+            <div id="chatInput" class="chat-input">
+                <apex:inputTextarea id="messageTextarea" value="{!newMessage}" rows="3" cols="50" onkeypress="handleKeyPress();" disabled="{!IF(ISNULL(wrapperList) || wrapperList.size == 0, true, false)}"/>
                 <div class="chat-select-container">
                     <div class="chat-select-label">Send As</div>
                     <apex:selectList value="{!selectedDealer}" size="1" styleClass="chat-select">
@@ -544,6 +656,7 @@
                     </apex:selectList>
                 </div>
                 <apex:actionFunction name="sendMessage" action="{!sendMessage}" oncomplete="window.location.reload();"/>
+                <apex:actionFunction name="makeEditable" action="{!disableTrue}" reRender="messageTextarea"/> 
                 <apex:commandButton image="{!URLFOR($Resource.SendLogo)}" title="Send" action="{!sendMessage}" onclick="this.disabled=true; showBlackout()"  oncomplete="window.location.reload();"/>
             </div>
         </div>

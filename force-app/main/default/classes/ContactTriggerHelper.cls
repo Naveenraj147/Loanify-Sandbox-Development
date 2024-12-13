@@ -32,19 +32,26 @@ public class ContactTriggerHelper {
             
             set<Id> accountIds = new set<Id> ();
             Map<Id, List<String>>  dealerIdToDealerProsEmailMap = new Map<Id, List<String>> ();
+            Map<Id, List<String>>  dealerIdToDealerProsPhoneMap = new Map<Id, List<String>> ();
             for(Contact con: newMap.Values()){
                 if(con.RecordTypeId==recordTypeId && con.AccountId != null){
                     conIds.add(con.Id);
                     accountIds.add(con.AccountId);
-                    if(con.Active__c == true){
+                    if(con.Active__c == true && Member_Response_Notification__c == true){
                         if (!dealerIdToDealerProsEmailMap.containsKey(con.AccountId)) {
                             dealerIdToDealerProsEmailMap.put(con.AccountId, new List<String> ());
                         }
                         dealerIdToDealerProsEmailMap.get(con.AccountId).add(con.Email);
+                        if(con.phone != null){
+                            if (!dealerIdToDealerProsPhoneMap.containsKey(con.AccountId)) {
+                                dealerIdToDealerProsPhoneMap.put(con.AccountId, new List<String> ());
+                            }
+                            dealerIdToDealerProsPhoneMap.get(con.AccountId).add(con.Phone);
+                        }
                     } 
                 }
             }
-            Map<Id, Account> accountMap = new Map<Id, Account>([SELECT Id, Manager_Email__c FROM Account WHERE Id IN :accountIds]);
+            Map<Id, Account> accountMap = new Map<Id, Account>([SELECT Id, Manager_Email__c, Phone FROM Account WHERE Id IN :accountIds]);
             
             // Adding Account Manager Emails 
             for (Id accId : accountIds) {
@@ -56,7 +63,7 @@ public class ContactTriggerHelper {
                 }
             }
             if(!conIds.isEmpty()){
-                sendPendingRequestsToDealer(accountIds, dealerIdToDealerProsEmailMap);
+                sendPendingRequestsToDealer(accountIds, dealerIdToDealerProsEmailMap,dealerIdToDealerProsPhoneMap);
             }
         } catch (Exception e){
             String errorMessage = e.getTypeName()+': '+e.getMessage()+' Line: '+e.getLineNumber();
@@ -108,7 +115,7 @@ public class ContactTriggerHelper {
                         dealerIdToDealerProsEmailMap.get(acc.Id).add(acc.Manager_Email__c);
                     }
                     if(!activeContactsWithManagerMail.isEmpty() && !dealerIdToDealerProsEmailMap.isEmpty()){
-                        sendPendingRequestsToDealer(accountsIdsWithMails, dealerIdToDealerProsEmailMap);  
+                        sendPendingRequestsToDealer(accountsIdsWithMails, dealerIdToDealerProsEmailMap, null);  
                     } 
                 } 
                 if(!accountsIdsWithoutMails.isEmpty()){
@@ -123,7 +130,7 @@ public class ContactTriggerHelper {
                         }  
                     }
                     if(!activeContactsWithoutManagerMail.isEmpty() && !dealerIdToDealerProsEmailMapWithoutAccountMail.isEmpty()){
-                        sendPendingRequestsToDealer(accountsIdsWithoutMails, dealerIdToDealerProsEmailMapWithoutAccountMail);
+                        sendPendingRequestsToDealer(accountsIdsWithoutMails, dealerIdToDealerProsEmailMapWithoutAccountMail,null);
                     } else{
                         Set<Id> inactiveConAccIds = new Set<Id>();
                         List<Contact> inactiveContactsWithoutManagerMail = [SELECT Id, Name, AccountId, Active__c FROM Contact WHERE AccountId=:accountsIdsWithoutMails AND Id=:conIds AND Active__c = false];
@@ -163,7 +170,7 @@ public class ContactTriggerHelper {
     
     // Email Helper class code 
     
-    public static void sendPendingRequestsToDealer (Set<Id> accIds, Map<Id, List<String>>  idToEmailMap){
+    public static void sendPendingRequestsToDealer (Set<Id> accIds, Map<Id, List<String>>  idToEmailMap, Map<Id, List<String>>  idToPhoneMap){
         try{
             OrgWideEmailAddress[] orgWideEmails = [SELECT Id, Address, DisplayName FROM OrgWideEmailAddress WHERE DisplayName = 'Support' LIMIT 1];
             OrgWideEmailAddress orgWideEmail = orgWideEmails.size() > 0 ? orgWideEmails[0] : null;
@@ -196,8 +203,10 @@ public class ContactTriggerHelper {
                 system.debug('Garage Ids:: '+updatedGarages);
                 system.debug('Gargeset:: ' +garageSet);
                 if(!garageSet.isEmpty()){
-                    List<Garage__c> garageswithPendingRequests = [SELECT Id, Name, VIN__c, FastPass_Dealer_Id__c, Opportunity__C, Pending_Requests__c, Dealer__c, Dealer__r.Manager_Email__c FROM Garage__c WHERE Id IN:garageSet];
-                    
+                    List<Garage__c> garageswithPendingRequests = [SELECT Id, Name, VIN__c, FastPass_Dealer_Id__c, Opportunity__C, Pending_Requests__c, Dealer__c, Dealer__r.Manager_Email__c, FastPass_Vehicle_Id__c FROM Garage__c WHERE Id IN:garageSet];
+                    List<tdc_tsw__Message_Template__c> smsTemplate = [SELECT Id, tdc_tsw__SMSBodyNew__c FROM tdc_tsw__Message_Template__c WHERE Name = 'Right_Swipe_Automation_SMS'];
+                    String dealerportalURL = system.label.Dealer_Portal_Page_URL;
+
                     for (Garage__c garage : garageswithPendingRequests) {
                         String pendingRequests = garage.Pending_Requests__c;
                         if (String.isNotBlank(pendingRequests)) {
@@ -217,6 +226,7 @@ public class ContactTriggerHelper {
                                         params.put('type', type);
                                         params.put('linkSharedDate', Date.today());
                                         params.put('garageId', garage.Id);
+                                        params.put('fastpassVehicleId', garage.FastPass_Vehicle_Id__c);
                                         
                                         // Convert to JSON string
                                         String jsonParams = JSON.serialize(params);
@@ -232,6 +242,25 @@ public class ContactTriggerHelper {
                                         email.setWhatId(garage.Id);
                                         
                                         emailMessages.add(email);
+                                        if(body.contains('Note: Click on the link to REPLY') && idToPhoneMap != null ){
+                                            body = body.replaceAll('<[^>]*>', '');
+                                            body = body.replaceAll('\n', '');
+                                            body = body.replaceAll('\t', '');
+                                            body = body.substringBefore('Thanks,FastPass');
+                                            
+                                            // String response = body.substringBetween('<a href="', '">Click here to reply');
+                                            // System.debug('response:: '+response);
+                                             String messageText = smsTemplate.size()>0 ? smsTemplate[0].tdc_tsw__SMSBodyNew__c : null;
+                                             
+                                             if(idToPhoneMap.containsKey(garage.Dealer__c) && messageText != null){
+                                                 messageText = messageText.replace('{firstMessage}', body);
+                                                 String conLink = dealerportalURL+'?q='+encryptedParams;
+                                                 messageText = messageText.replace('{Link}', conLink);
+                                                 for(String sms : idToPhoneMap.get(garage.Dealer__c) ){
+                                                     tdc_tsw.GlobalSMSSender.SendSmsWithPhoneNumberAndMessageText(sms,messageText,garage.Id) ;
+                                                 }
+                                             }
+                                         }
                                     }
                                 }
                             }

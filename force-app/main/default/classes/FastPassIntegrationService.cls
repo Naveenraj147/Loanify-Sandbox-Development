@@ -19,17 +19,19 @@ global with sharing class FastPassIntegrationService {
                 
                 if (requestType == 'askDealer') {
                     wrapper = requestForTestDrive(requestBody);
-                }// else if (requestType == 'askDealer') {
-                  //  wrapper = askDealer(requestBody);}
+                }
                  else if (requestType == 'askDealerConversation') {
                     wrapper = requestTestDriveResponse(requestBody);
-                }// else if (requestType == 'askDealerConversation') {
-                  //  wrapper = requestAskDealerResponse(requestBody);}
+                }
                  else if (requestType == 'vehicleAdditionToGarage'){
                     wrapper = vehicleAddition(requestBody);
                 }else if (requestType == 'vehicleRemovalInGarage'){
                     wrapper = vehicleRemovalInGarage(requestBody);
-                } else {
+                } 
+                else if (requestType == 'defaultMemberMessage'){
+                     wrapper = sendRightSwipeNotification(requestBody);
+                 }
+                else {
                     wrapper.error = new Map<String, String>{'Message' => 'Could not find a match for RequestType'};
                         wrapper.success = new SuccesWrapper() ;
                     sendErrorEmail('Failed to ' + requestType, JSON.serialize(wrapper.error));
@@ -62,6 +64,11 @@ global with sharing class FastPassIntegrationService {
             String vehicleName = (String) requestBody.get('VehicleName');
             Integer modelYear = (Integer) requestBody.get('ModelYear');
             Integer fastpassVehicleId =  Integer.valueOf(requestBody.get('fastpassVehicleId'));
+            Integer price = (Integer) requestBody.get('Price');
+            String stockNumber = (String) requestBody.get('StockNumber');
+            String model = (String) requestBody.get('Model');
+            String make = (String) requestBody.get('Make');
+            String chatId = (String) requestBody.get('ChatId');
             List<String> blankFields = new List<String>();
             if (String.isBlank(memberLoanId)) {
                 blankFields.add('LoanId');
@@ -89,7 +96,7 @@ global with sharing class FastPassIntegrationService {
             }
             
             
-            List<Opportunity> oppList = [SELECT Id, Name, Card_Number__c FROM Opportunity WHERE Card_Number__c =: memberLoanId LIMIT 1];
+            List<Opportunity> oppList = [SELECT Id, Name, Card_Number__c, Auto_Shopper__r.FirstName FROM Opportunity WHERE Card_Number__c =: memberLoanId LIMIT 1];
             
             if(oppList.size() > 0 ){
                 Opportunity opp = oppList[0];
@@ -111,11 +118,16 @@ global with sharing class FastPassIntegrationService {
                 else {
                     List<Account> accList = [SELECT Id, Name, FastPass_Dealer_Id__c, Manager_Email__c, RecordType.DeveloperName FROM Account WHERE FastPass_Dealer_Id__c =: dealerMarketcheckId AND RecordType.DeveloperName = 'Auto_Dealer'];
                     List<Contact> conList;
+                    List<Lead> leadList;
                     if(accList.size() > 0 ){
                         conList   = [SELECT Id, Name, AccountId, Active__c, RecordType.DeveloperName FROM Contact WHERE AccountId =: accList[0].Id AND RecordType.DeveloperName = 'Auto_dealer_Pro' AND Active__c = true order by CreatedDate asc];
                     }
+                    else{
+                        leadList = [SELECT Id, FastPass_Dealer_Id__c, Manager_Email__c, Manager_Name__c, Dealer_Pro_1_Email__c, Dealer_Pro_2_Email__c, Dealer_Pro_3_Email__c FROM Lead WHERE FastPass_Dealer_Id__c =: dealerMarketcheckId];
+                    }
                     
-                    createGarageRecord(dealerMarketcheckId, opp.Id, modelYear, vehicleVIN, vehicleName, accList, conList, fastpassVehicleId );
+                    Garage__c garageRecord = createGarageRecord(dealerMarketcheckId, opp.Id, modelYear, vehicleVIN, vehicleName, accList, conList, fastpassVehicleId, make, model, stockNumber, price, leadList, chatId );
+                    sendNotification('New Vehicle Added', opp.Auto_Shopper__r.FirstName+ ' added a new vehicle 🚘 to the garage', garageRecord.Id, null);
                 }
                 SuccesWrapper wrapp = new SuccesWrapper();
                 wrapp.message = 'Vehicle successfully added into Garage';
@@ -139,7 +151,7 @@ global with sharing class FastPassIntegrationService {
         
     }
     
-    public static Garage__c createGarageRecord(String dealerMarketcheckId, String oppId, Integer modelYear, String vehicleVIN, String vehicleName,  List<Account> accList, List<Contact> conList, Integer fastpassVehicleId  ){
+    public static Garage__c createGarageRecord(String dealerMarketcheckId, String oppId, Integer modelYear, String vehicleVIN, String vehicleName,  List<Account> accList, List<Contact> conList, Integer fastpassVehicleId, String make, String model, String stockNumber, Integer price, List<Lead> leadList, String chatId  ){
         //  List<Account> accList = [SELECT Id, Name, Marketcheck_Id__c, Manager_Email__c, RecordType.DeveloperName FROM Account WHERE Marketcheck_Id__c =: dealerMarketcheckId AND RecordType.DeveloperName = 'Auto_Dealer'];
         Garage__c garage = new Garage__c ();
         garage.Active__c = true;
@@ -149,6 +161,11 @@ global with sharing class FastPassIntegrationService {
         garage.VIN__c = vehicleVIN;
         garage.Name = vehicleName;
         garage.FastPass_Vehicle_Id__c = fastpassVehicleId;
+        garage.Make__c = make;
+        garage.Model__c = model;
+        garage.Price__c = price;
+        garage.Stock_Number__c = stockNumber;
+        garage.Chat_Id__c = chatId;
         
         if(accList.size() > 0){
             Account acc = accList[0];
@@ -171,6 +188,14 @@ global with sharing class FastPassIntegrationService {
                 garage.Dealer_pro_3__c = conList[2].Id;
             }
         }
+        else if(leadList.size() > 0){
+            Lead lead = leadList[0];
+            garage.Lead_Dealer__c = lead.Id;
+            if(lead.Manager_Email__c != null || lead.Dealer_Pro_2_Email__c != null ||  lead.Dealer_Pro_2_Email__c != null || lead.Dealer_Pro_3_Email__c != null ){
+                garage.Dealer_Email_Available__c = true;
+            }
+        }
+        
         insert garage;
         return garage;
     }
@@ -249,6 +274,8 @@ global with sharing class FastPassIntegrationService {
             String vehicleName = (String) requestBody.get('VehicleName');
             String memberQuery = (String) requestBody.get('MemberQuery');
             Integer fastpassVehicleId = (Integer.valueOf(requestBody.get('FastpassVehicleId')));
+            String chatId = (String) requestBody.get('ChatId');
+
             List<String> blankFields = new List<String>();
             
             if (String.isBlank(memberLoanId)) {
@@ -279,7 +306,7 @@ global with sharing class FastPassIntegrationService {
                 return wrapper;
             }
             
-            List<Opportunity> oppList = [SELECT Id, Name, Auto_Shopper__c, Vehicle_VIN__c, Auto_Shopper__r.Name, Card_Number__c 
+            List<Opportunity> oppList = [SELECT Id, Name, Auto_Shopper__c, Vehicle_VIN__c, Auto_Shopper__r.Name, Card_Number__c, Auto_Shopper__r.FirstName
                                          FROM Opportunity 
                                          WHERE Card_Number__c = :memberLoanId LIMIT 1];
             
@@ -292,7 +319,7 @@ global with sharing class FastPassIntegrationService {
                 return wrapper;
             }
             
-            List<Garage__c> garageList = [SELECT Id, Name, VIN__c, Pending_Requests__c, Pending_Request_JSON__c, FastPass_Vehicle_Id__c from Garage__c WHERE FastPass_Vehicle_Id__c =: fastpassVehicleId AND Opportunity__c =: opp.Id ];
+            List<Garage__c> garageList = [SELECT Id, Name, VIN__c, Pending_Requests__c, Pending_Request_JSON__c, FastPass_Vehicle_Id__c, Chat_Id__c from Garage__c WHERE FastPass_Vehicle_Id__c =: fastpassVehicleId AND Opportunity__c =: opp.Id ];
             Garage__c garage = garageList.size() > 0 ? garageList[0] : null; 
             
             
@@ -304,15 +331,33 @@ global with sharing class FastPassIntegrationService {
             Account acc = accList.size() > 0 ? accList[0] : null;
             List<String> ccAddress = new List<String>();
             List<Contact> conList;
+            List<Lead> leadList;
+            Lead lead;
             if (acc <> null) {
                 conList = [SELECT Id, AccountId, Name, Email, RecordType.DeveloperName from Contact Where AccountId =:acc.Id AND RecordType.DeveloperName = 'Auto_Dealer_Pro' AND Active__c = true order by CreatedDate asc];
                 for(Contact each : conList){
                     ccAddress.add(each.Email);
                 }
             }
-            if (garage == null) {
-                garage = createGarageRecord(dealerMarketcheckId, opp.Id, null, vehicleVIN, vehicleName, accList, conList, fastpassVehicleId );
+            else{
+                leadList = [SELECT Id, FastPass_Dealer_Id__c, Manager_Name__c, Manager_Email__c, Dealer_Pro_1_Email__c, Dealer_Pro_2_Email__c, Dealer_Pro_3_Email__c, Company FROM Lead WHERE FastPass_Dealer_Id__c =: dealerMarketcheckId];
+                lead = leadList.size() > 0 ? leadList[0] : null;
+                if(lead != null){
+                    if(lead.Dealer_Pro_1_Email__c != null){
+                        ccAddress.add(lead.Dealer_Pro_1_Email__c);
+                    }
+                    if(lead.Dealer_Pro_2_Email__c != null){
+                        ccAddress.add(lead.Dealer_Pro_2_Email__c);
+                    }
+                    if(lead.Dealer_Pro_2_Email__c != null){
+                        ccAddress.add(lead.Dealer_Pro_2_Email__c);
+                    }
+                }
             }
+            if (garage == null) {
+                garage = createGarageRecord(dealerMarketcheckId, opp.Id, null, vehicleVIN, vehicleName, accList, conList, fastpassVehicleId, null, null, null, null, leadList, chatId );
+            }
+           
             List<OrgWideEmailAddress> orgWideEmails = [SELECT Id, Address, DisplayName FROM OrgWideEmailAddress where DisplayName = 'Support' Limit 1];
             OrgWideEmailAddress orgWideEmail = orgWideEmails.size() > 0 ? orgWideEmails[0] : null;
             if (orgWideEmail == null) {
@@ -322,6 +367,37 @@ global with sharing class FastPassIntegrationService {
                 return wrapper;
             }
             String dealerportalURL = system.label.Dealer_Portal_Page_URL;
+            List<CustomNotificationType> notificationTypeList = [SELECT Id, DeveloperName FROM CustomNotificationType WHERE DeveloperName='SMS_Notification' Limit 1];
+            
+            if(notificationTypeList.size() > 0){
+                CustomNotificationType notificationType = notificationTypeList[0];
+                // Create a new custom notification
+            Messaging.CustomNotification notification = new Messaging.CustomNotification();
+            notification.setTitle('New message from '+ (Opp.Auto_Shopper__r.FirstName != null? Opp.Auto_Shopper__r.FirstName:Opp.Auto_Shopper__r.Name) );
+            System.Debug('Account :: '+ (acc != null?acc.Name: 'Account null'));
+            System.Debug('Lead :: '+ (lead != null? lead.Company:'Lead Null'));
+            notification.setBody('🏬 '+ (acc != null? acc.Name: lead != null? lead.Company:'')+ ' \n 🚘 '+ VehicleName );
+            notification.setNotificationTypeId(notificationType.Id);
+            notification.setTargetId(garage.Id);
+            List<String> userNameList = System.Label.Users_to_notify_member_query.split(',');
+            if(userNameList.size() > 0){
+                List<User> usersToSend = [SELECT Id, Username FROM user WHERE Username IN :userNameList ];
+                Set<String> userIdSet = new Set<String>();
+                for(User each : usersToSend){
+                    userIdSet.add(each.Id);
+                }
+                
+               if(userIdSet.size() > 0){
+                System.Debug('Notificaation send');
+                notification.send(userIdSet);
+               }
+                
+            }
+            
+            }
+            
+
+
             // Create JSON object
             Map<String, Object> params = new Map<String, Object>();
             params.put('opportunityId', opp.Id);
@@ -333,6 +409,8 @@ global with sharing class FastPassIntegrationService {
             params.put('garageId', garage.Id);
             params.put('fastpassVehicleId', fastpassVehicleId);
             
+            System.Debug('fastpassVehicleId :: '+fastpassVehicleId);
+            System.Debug('params :: '+params);
             // Convert to JSON string
             String jsonParams = JSON.serialize(params);
             List<EmailTemplate> emailTemplates = [SELECT Id, Name, Subject, HtmlValue, DeveloperName 
@@ -357,6 +435,7 @@ global with sharing class FastPassIntegrationService {
             String htmlBody1 = emailTemp2.HtmlValue;
             String subject1 = emailTemp2.Subject;
             String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
+            System.Debug('conLink :: '+conLink);
             
             if(testDriveDateTime != null){
                 System.Debug('testDriveDateTime Condition :: Inside');
@@ -380,7 +459,7 @@ global with sharing class FastPassIntegrationService {
                     subject = subject.replace('{{{Opportunity.Card_Number__c}}}', memberLoanId);
                 }
                 if(htmlBody != null){
-                    htmlBody = acc <> null?  acc.Manager_Name__c <> null? htmlBody.replace('{{{ManagerName}}}', acc.Manager_Name__c):htmlBody.replace('{{{ManagerName}}}', acc.Name):htmlBody;
+                    htmlBody = acc <> null?  acc.Manager_Name__c <> null? htmlBody.replace('{{{ManagerName}}}', acc.Manager_Name__c):htmlBody.replace('{{{ManagerName}}}', acc.Name):htmlBody.replace('{{{ManagerName}}}','');
                     htmlBody = htmlBody.replace('{{{MemberName}}}', opp.Auto_Shopper__r.Name);
                     htmlBody = htmlBody.replace('{{{VINNumber}}}', vehicleVIN);
                     htmlBody = htmlBody.replace('{{{VehicleName}}}', vehicleName);
@@ -413,7 +492,8 @@ global with sharing class FastPassIntegrationService {
             }
              System.debug('htmlBody :: '+ htmlBody);
             System.debug('memberQuery :: '+ memberQuery);
-            String mailAddress = acc != null? acc.Manager_Email__c : null;
+            String mailAddress = acc != null? acc.Manager_Email__c : lead != null? lead.Manager_Email__c:null;
+
             //String mailAddress = null;
             if(mailAddress != null && mailAddress != ''){
                 email.setToAddresses(new List<String> { mailAddress });
@@ -450,11 +530,12 @@ global with sharing class FastPassIntegrationService {
                     System.debug('emailBody :: ' +emailBody);
                     String EmailMessage = emailBody.substringBetween('Member Query: ', 'Please <a href="');
                     if(EmailMessage!=null){
+                        system.debug('EmailMessage ::: ' +EmailMessage);
                         String Vehicle = emailBody.substringBetween('Vehicle Name: ', '<br />');
                         String testDriveDate = emailBody.substringBetween('Test Drive Date: ', '<br />');
+                        EmailMessage = EmailMessage.replaceAll('<br/>', '\n');
                         EmailMessage = EmailMessage.replaceAll('<[^>]*>', '');
-                        EmailMessage = EmailMessage.replaceAll('\n', '');
-                        EmailMessage = decodeHtmlEntities(EmailMessage);
+                        EmailMessage = decodeHtmlEntities(EmailMessage.trim());
                        /* String body = 'Can you provide the test drive for '+vehicle+' on '+testDriveDate+'. ';
                         body += EmailMessage;*/
                         emailDetails.EmailMessage = EmailMessage;
@@ -463,9 +544,10 @@ global with sharing class FastPassIntegrationService {
                 else if(emailBody.contains('Member Response:')){
                     String EmailMessage = emailBody.substringBetween('Member Response:', 'Please <a href="');
                     if(EmailMessage!=null){
+                        system.debug('EmailMessage ::: ' +EmailMessage);
+                        EmailMessage = EmailMessage.replaceAll('<br/>', '\n');
                         EmailMessage = EmailMessage.replaceAll('<[^>]*>', '');
-                        EmailMessage = EmailMessage.replaceAll('\n', '');
-                        EmailMessage = decodeHtmlEntities(EmailMessage);
+                        EmailMessage = decodeHtmlEntities(EmailMessage.trim());
                         emailDetails.EmailMessage = EmailMessage;
                     }
                 }
@@ -484,6 +566,9 @@ global with sharing class FastPassIntegrationService {
                     garagesWithPendingRequest.Pending_Requests__c = 'Subject++'+email.getSubject()+'Body++'+email.getHtmlBody()+'Type++ testDrive'  ;
                     
                 }
+                if(chatId != null){
+                    garagesWithPendingRequest.Chat_Id__c = chatId;
+                }
                 update garagesWithPendingRequest;
             }
             
@@ -492,6 +577,9 @@ global with sharing class FastPassIntegrationService {
                 List<Messaging.SendEmailResult> results = Messaging.sendEmail(emailList);
                 Garage__c garageWithoutPendingRequest = new Garage__c();
                 garageWithoutPendingRequest.Id = garage.Id;
+                if(chatId != null){
+                garageWithoutPendingRequest.Chat_Id__c = chatId;
+                }
                 garageWithoutPendingRequest.Last_Member_Response_Test_Drive__c = System.now();
                 update garageWithoutPendingRequest;
                 for (Messaging.SendEmailResult result : results) {
@@ -523,213 +611,6 @@ global with sharing class FastPassIntegrationService {
                 wrapper.success = new SuccesWrapper();
             String errorMessage = e.getTypeName() + ': ' + e.getMessage() + ' Line: ' + e.getLineNumber();
             sendErrorEmail('failed to process requestForAskDealer.',  errorMessage );
-            return wrapper;
-        }
-    }
-    global static CreateResponseWrapper askDealer(Map<String, Object> requestBody) {
-        CreateResponseWrapper wrapper = new CreateResponseWrapper();
-        try{
-            String memberLoanId = (String) requestBody.get('LoanId');
-            String dealerMarketcheckId = (String) requestBody.get('FastPassDealerId');
-            String vehicleVIN = (String) requestBody.get('VehicleVIN');
-            String memberQuery = (String) requestBody.get('MemberQuery');
-            String vehicleName = (String) requestBody.get('VehicleName');
-
-            
-            List<String> blankFields = new List<String>();
-            
-            if (String.isBlank(memberLoanId)) {
-                blankFields.add('LoanId');
-            }
-            if (String.isBlank(dealerMarketcheckId)) {
-                blankFields.add('FastPassDealerId');
-            }
-            if (String.isBlank(vehicleVIN)) {
-                blankFields.add('VehicleVIN');
-            }
-            if (String.isBlank(VehicleName)) {
-                blankFields.add('VehicleName');
-            }
-            if (String.isBlank(memberQuery)){
-                blankFields.add('MemberQuery');
-            }
-            if (!blankFields.isEmpty()) {
-                String nullFields = String.join(blankFields, ', ');
-                wrapper.error = new Map<String, String>{
-                    'Error' => 'Required fields are missing: ' + nullFields
-                        };
-                            wrapper.success = new SuccesWrapper();
-                sendErrorEmail('failed to process askDealer.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Ask Dealer Request');
-                return wrapper;
-            }
-            
-            List<Opportunity> oppList = [SELECT Id, Name, Auto_Shopper__c, Vehicle_VIN__c, Auto_Shopper__r.Name, Card_Number__c 
-                                         FROM Opportunity 
-                                         WHERE Card_Number__c = :memberLoanId 
-                                         LIMIT 1];
-            Opportunity opp = oppList.size() > 0 ? oppList[0] : null;
-            
-            if (opp == null) {
-                wrapper.error = new Map<String, String>{'Error' => 'No matching opportunity found for the provided LoanId'};
-                    wrapper.success =  new SuccesWrapper(); 
-                sendErrorEmail('failed to process askDealer.', 'No matching opportunity found for the provided LoanId.<br/>Request Type: Test Drive<br/>VIN: '+vehicleVIN+'<br/>Vehicle Name: '+vehicleName+'<br/>LoanId: '+memberLoanId);
-                return wrapper;
-                
-            }
-            
-            List<Garage__c> garageList = [SELECT Id, Name, VIN__c,Pending_Requests__c,Pending_Request_JSON__c from Garage__c WHERE VIN__c =: vehicleVIN AND Opportunity__c =: opp.Id ];
-            Garage__c garage = garageList.size() > 0 ? garageList[0] : null; 
-            
-            
-            List<Account> accList =  [SELECT Id, Name, Manager_Name__c, Manager_Email__c, FastPass_Dealer_Id__c, RecordType.DeveloperName 
-                                     FROM Account 
-                                     WHERE RecordType.DeveloperName = 'Auto_Dealer' 
-                                     AND FastPass_Dealer_Id__c =: dealerMarketcheckId 
-                                     LIMIT 1];
-            Account acc = accList.size() > 0 ? accList[0] : null;
-
-            List<Contact> conList;
-            List<String> ccAddress = new List<String>();
-            if (acc <> null) {
-                conList = [SELECT Id, AccountId, Name, Email, RecordType.DeveloperName from Contact Where AccountId =:acc.Id AND RecordType.DeveloperName = 'Auto_Dealer_Pro' AND Active__c = true order by CreatedDate asc];
-                for(Contact each : conList){
-                    ccAddress.add(each.Email);
-                }      
-            }
-            if (garage == null) {
-                garage = createGarageRecord(dealerMarketcheckId, opp.Id, null, vehicleVIN, vehicleName, accList, conList, null);
-            }
-            OrgWideEmailAddress[] orgWideEmails = [SELECT Id, Address, DisplayName FROM OrgWideEmailAddress where DisplayName = 'Support' Limit 1];
-            OrgWideEmailAddress orgWideEmail = orgWideEmails.size() > 0 ? orgWideEmails[0] : null;
-            if (orgWideEmail == null) {
-                wrapper.error = new Map<String, String>{'Message' => 'From Address is not found'};
-                    wrapper.success =  new SuccesWrapper(); 
-                sendErrorEmail('failed to process askDealer.', 'Orgwide address is not found');
-                return wrapper;
-            }
-            String dealerportalURL = system.label.Dealer_Portal_Page_URL;
-            // Create JSON object
-            Map<String, Object> params = new Map<String, Object>();
-            params.put('opportunityId', opp.Id);
-            params.put('dealerId', dealerMarketcheckId);
-            params.put('vehicleVin', vehicleVIN);
-            params.put('vehicleName', vehicleName);
-            params.put('type', 'askDealer');
-            params.put('linkSharedDate', Date.today());
-            params.put('garageId', garage.Id);
-            String jsonParams = JSON.serialize(params);
-            List<EmailTemplate> emailTemplate = [SELECT Id, Name, Subject, HtmlValue, DeveloperName 
-                                                 FROM EmailTemplate 
-                                                 WHERE DeveloperName = 'Member_Response_For_Test_Drive_1719904116801' Limit 1];
-            EmailTemplate empTemp = emailTemplate[0];                                                             
-            List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
-            Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
-            String subject = empTemp.Subject;
-            String htmlBody = empTemp.HtmlValue;
-            String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
-            if(subject != null){
-                subject = subject.replace('Test Drive', 'Query');
-                subject = subject.replace('{{{Opportunity.Auto_Shopper__c}}}', opp.Auto_Shopper__r.Name);
-                subject = subject.replace('{{{VINNumber}}}', vehicleVIN);
-                subject = subject.replace('{{{Opportunity.Card_Number__c}}}', memberLoanId);
-            }
-            if(htmlBody != null){
-                htmlBody = acc <> null?  acc.Manager_Name__c <> null? htmlBody.replace('{{{ManagerName}}}', acc.Manager_Name__c):htmlBody.replace('{{{ManagerName}}}', acc.Name):htmlBody.replace('{{{ManagerName}}}','');
-                htmlBody = htmlBody.replace('{{{MemberName}}}', opp.Auto_Shopper__r.Name);
-                htmlBody = htmlBody.replace('{{{MemberResponse}}}', memberQuery);
-                htmlBody = htmlBody.replace('Member Response', 'Member Query');
-                htmlBody = htmlBody.replace('click here', '<a href="' +conLink+ '">click here</a>');
-                htmlBody = htmlBody.replace('has responded for the recent discussion.', 'is asking query.');
-            }
-            //String invalidAddrss = 'samplemail.com';
-            String mailAddress = acc <> null? acc.Manager_Email__c : null;
-            if(mailAddress != null && mailAddress != ''){
-                email.setToAddresses(new List<String> { mailAddress });
-                email.setCCAddresses(ccAddress );
-            }else{
-                email.setToAddresses(ccAddress);
-            }
-            email.setOrgWideEmailAddressId(orgWideEmail.Id);
-            email.setSubject(subject);
-            email.setHtmlBody(htmlBody);
-            email.setSaveAsActivity(true); 
-            email.setWhatId(garage.Id);
-            emailList.add(email);
-            
-            if(mailAddress == null && ccAddress.size() == 0){
-                Garage__c garageWithPendingRequest = new Garage__c();
-                garageWithPendingRequest.Id = garage.Id;
-                garageWithPendingRequest.Last_Member_Response_Ask_Dealer__c = System.now();
-                garageWithPendingRequest.Pending_Requests__c = garage.Pending_Requests__c;
-                
-                CreateResponseWrapperSuccess emailDetails = new CreateResponseWrapperSuccess();
-                emailDetails.VehicleVIN = VehicleVIN;
-                emailDetails.LoanId = memberLoanId;
-                emailDetails.MarketCheckId = dealerMarketcheckId;
-                String memberQueryReq = email.getHtmlBody().substringBetween('Member Query:', 'Please <a href="');
-                if(memberQueryReq!=null){
-                    memberQueryReq = memberQueryReq.replaceAll('<[^>]*>', '');
-                    memberQueryReq = memberQueryReq.replaceAll('\n', '');
-                    memberQueryReq = decodeHtmlEntities(memberQueryReq);
-                    emailDetails.EmailMessage = memberQueryReq;
-                }
-                emailDetails.Sender = 'Member';
-                emailDetails.CreatedDate = System.now();
-                String pendingReqJson = JSON.serialize(emailDetails);
-                System.debug('Pending_Request_JSON__c  :: '+ garageWithPendingRequest.Pending_Request_JSON__c);
-                
-				garageWithPendingRequest.Pending_Request_JSON__c = processPendingReqJson(garage.Pending_Request_JSON__c, 'askDealer', JSON.serialize(emailDetails));
-                if(garage.Pending_Requests__c <> null){
-                    garageWithPendingRequest.Pending_Requests__c = garage.Pending_Requests__c + ';; Subject++'+email.getSubject()+'Body++'+email.getHtmlBody()+'Type++ askDealer';
-                   /* Map<String, object> data = (Map<String, object>) JSON.deserializeUntyped(garage.Pending_Request_JSON__c );
-                    if(data.containsKey('askDealer')){
-                        String askDealerJson = JSON.serialize(data.get('askDealer'));
-                        garageWithPendingRequest.Pending_Request_JSON__c = '{"askDealer":['+pendingReqJson + ',' + garage.Pending_Request_JSON__c.subStringAfter('[');
-                    }*/
-                }
-                else{
-                    garageWithPendingRequest.Pending_Requests__c = 'Subject++'+email.getSubject()+'Body++'+email.getHtmlBody()+'Type++ askDealer';
-                  //  garageWithPendingRequest.Pending_Request_JSON__c = '{"askDealer":['+pendingReqJson+']}';
-                    
-                }
-                update garageWithPendingRequest;
-            }
-            
-            if (!Test.isRunningTest() && emailList.size() > 0 && (mailAddress <> null || ccAddress.size()>0)) {
-                Messaging.SendEmailResult[] results = Messaging.sendEmail(emailList);
-                Garage__c garageWithoutPendingRequest = new Garage__c();
-                garageWithoutPendingRequest.Id = garage.Id;
-                garageWithoutPendingRequest.Last_Member_Response_Ask_Dealer__c = System.now();
-                update garageWithoutPendingRequest;
-                for (Messaging.SendEmailResult result : results) {
-                    if (result.isSuccess()) {
-                        SuccesWrapper wrapp = new SuccesWrapper();
-                        wrapp.message = 'Ask Dealer request sent successfully';
-                        wrapp.data = new List<CreateResponseWrapperSuccess>();
-                        wrapper.success = wrapp;
-                        wrapper.error = new Map<String, String>{};
-                            } else {
-                                
-                                wrapper.error = new Map<String, String>{'Message' => 'Failed to send Ask dealer request.<br/> Error: ' + result.getErrors()[0].getMessage()};
-                                    wrapper.success = new SuccesWrapper();
-                                sendErrorEmail('failed to process askDealer.', result.getErrors()[0].getMessage()+'<br/> Request Type: Ask Dealer<br/>VIN: '+vehicleVIN+'<br/>Vehicle Name: '+vehicleName+'<br/>Opportunity Id: '+opp.Id+'<br/> Dealer Id: '+acc.Id);
-                                
-                            }  
-                }
-            }  else if(emailList.size() > 0 && mailAddress == null && ccAddress.size() == 0){
-                SuccesWrapper wrapp = new SuccesWrapper();
-                wrapp.message = 'Ask Dealer request sent successfully';
-                wrapp.data = new List<CreateResponseWrapperSuccess>();
-                wrapper.success = wrapp;
-                wrapper.error = new Map<String, String>{};
-                    }
-            return wrapper;
-        }
-        catch(Exception e){
-            wrapper.error = new Map<String, String>{'Message' => 'Somthing went wrong.'};
-                wrapper.success = new SuccesWrapper();
-            String errorMessage = e.getTypeName() + ': ' + e.getMessage() + ' Line: ' + e.getLineNumber();
-            sendErrorEmail('failed to process askDealer.',  errorMessage );
             return wrapper;
         }
     }
@@ -799,7 +680,7 @@ global with sharing class FastPassIntegrationService {
                 sendErrorEmail('failed to process requestTestDriveResponse.', 'No Opportunity found with the provided LoanId.<br/>Request Type: Test Drive Response<br/>VIN: '+vehicleVIN+'<br/>LoanId: '+memberLoanId);
                 return wrapper;       
             }
-            List<Garage__c> garList = [SELECT Id, Name, VIN__c, FastPass_Dealer_Id__c,Pending_Requests__c,Pending_Request_JSON__c,FastPass_Vehicle_Id__c  From Garage__c WHERE FastPass_Vehicle_Id__c =:fastpassVehicleId LIMIT 1];
+            List<Garage__c> garList = [SELECT Id, Name, VIN__c, FastPass_Dealer_Id__c,Pending_Requests__c,Pending_Request_JSON__c,FastPass_Vehicle_Id__c,Chat_Id__c  From Garage__c WHERE FastPass_Vehicle_Id__c =:fastpassVehicleId AND Opportunity__c =: opp.Id LIMIT 1];
             Garage__c gar = garList.size() > 0 ? garList[0] : null;
             if(gar == null){
                 wrapper.error = new Map<String, String>{'Message' => 'No Vehicle found in garage'};
@@ -807,6 +688,7 @@ global with sharing class FastPassIntegrationService {
                 sendErrorEmail('failed to process requestTestDriveResponse.', 'No Vehicle found in garage.<br/>Request Type: Test Drive Response<br/>VIN: '+vehicleVIN+'<br/>Opportunity Id: '+opp.Id);
                 return wrapper;       
             }
+            String chatId = gar != null? gar.Chat_Id__c : null;
 			Map<String, DateTime> pendingReqDTMap = new Map<String, DateTime>();
             if(gar.Pending_Request_JSON__c != null){
                 Map<String, object> dataMap = (Map<String, object>) JSON.deserializeUntyped(gar.Pending_Request_JSON__c );
@@ -828,12 +710,13 @@ global with sharing class FastPassIntegrationService {
             
             String subjectPattern = 'Test Drive requested by ' + opp.Auto_Shopper__r.Name +' for ' +'#'+opp.Card_Number__c + ' in #'+vehicleVIN +' #' + fastpassVehicleId;
             String subjectPattern1 = 'Query requested by ' + opp.Auto_Shopper__r.Name +' for ' +'#'+opp.Card_Number__c + ' in #'+vehicleVIN +' #' + fastpassVehicleId;
+            String subjectPattern2 =  'Availability Inquiry: Pre-Approved Member Interested in a Vehicle';
             system.debug('Subject Pattern in Main Class::' + subjectPattern);
             List<EmailMessage> allEmails = [
                 SELECT Id, Subject, FromAddress, ToAddress, Status, HtmlBody, TextBody, CreatedDate
                 FROM EmailMessage
                 WHERE RelatedToId = :gar.Id
-                AND (Subject LIKE :( subjectPattern ) OR Subject LIKE :(subjectPattern1))
+                AND (Subject LIKE :( subjectPattern ) OR Subject LIKE :(subjectPattern1) OR Subject LIKE :(subjectPattern2))
                 ORDER BY CreatedDate DESC];
             
             // Map to track unique combinations of HtmlBody and Date for specific phrases
@@ -863,6 +746,8 @@ global with sharing class FastPassIntegrationService {
                     //uniqueEmails.add(email);
                     emailIds.add(email.Id);
                 } else if (email.HtmlBody != null && !email.HtmlBody.contains('Dealer Response:') && !email.HtmlBody.contains('Member Query:') && !email.HtmlBody.contains('Member Response:')){
+                    emailIds.add(email.Id);
+                }else if(email.HtmlBody != null && !email.HtmlBody.contains('Note: Click on the link to REPLY')){
                     emailIds.add(email.Id);
                 }
             }
@@ -933,7 +818,16 @@ global with sharing class FastPassIntegrationService {
                     }
                     
                     emailDetails.Sender = 'Dealer';
-                }else if(!emailBody.contains('Member Query:') && !emailBody.contains('Member Response:') && !emailBody.contains('Dealer Response:')){
+                }
+                else if(emailBody.contains('Note: Click on the link to REPLY')){
+                    String dealerResponse = emailBody.substringBefore('Thanks,');
+                    dealerResponse = dealerResponse.replaceAll('<[^>]*>', '');
+                    dealerResponse = dealerResponse.replaceAll('\n', '');
+                    dealerResponse = dealerResponse.replaceAll('\t', '');
+                    emailDetails.EmailMessage = dealerResponse;
+                    emailDetails.Sender = 'Member';
+                }
+                else if(!emailBody.contains('Member Query:') && !emailBody.contains('Member Response:') && !emailBody.contains('Dealer Response:')){
                     system.debug('email body::'+emailBody);
                     String Vehicle = emailBody.substringBetween('Vehicle Name: ', '<br />');
                     String testDriveDate = emailBody.substringBetween('Test Drive Date: ', '<br/>');
@@ -941,6 +835,7 @@ global with sharing class FastPassIntegrationService {
                     emailDetails.EmailMessage = 'Can you provide the test drive for '+vehicle+' on '+testDriveDate+'.';
                     emailDetails.Sender = 'Member';
                 }
+                
                 if(pendingReqDTMap.ContainsKey(emailDetails.EmailMessage)){
                     emailDetails.CreatedDate = pendingReqDTMap.get(emailDetails.EmailMessage);
                 }
@@ -961,6 +856,7 @@ global with sharing class FastPassIntegrationService {
             wrapp.data = conversations;
             wrapp.currentPage = pageNumber;
             wrapp.totalPages = (Integer)totalPages;
+            wrapp.chatId = chatId;
             wrapper.success = wrapp;
             wrapper.error = new Map<String, String>{};
                 return wrapper;
@@ -975,194 +871,7 @@ global with sharing class FastPassIntegrationService {
         
     }
     
-    global static CreateResponseWrapper requestAskDealerResponse(Map<String, Object> requestBody) {
-        CreateResponseWrapper wrapper = new CreateResponseWrapper();
-        try{
-            String memberLoanId = (String) requestBody.get('LoanId');
-            String dealerMarketcheckId = (String) requestBody.get('FastPassDealerId');
-            String vehicleVIN = (String) requestBody.get('VehicleVIN');
-            Integer pageNumber = (Integer) requestBody.get('PageNumber');
-            
-            List<String> blankFields  = new List<String> ();
-            if (String.isBlank(memberLoanId)){
-                blankFields.add('LoanId');
-            }
-            if(String.isBlank(dealerMarketcheckId)){
-                blankFields.add('FastPassDealerId');
-            }
-            if(String.isBlank(vehicleVIN)){
-                blankFields.add('vehicleVIN');
-            }
-            if(pageNumber == null){
-                blankFields.add('PageNumber');
-            }
-            if (!blankFields.isEmpty()) {
-                String nullFields = String.join(blankFields, ', ');
-                wrapper.error = new Map<String, String>{
-                    'Message' => 'Required fields are missing: ' + nullFields
-                        };
-                            wrapper.success = new SuccesWrapper();
-                sendErrorEmail('failed to process requestTestDriveResponse.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Ask Dealer Response');
-                
-                return wrapper;
-            }
-            
-            Integer index = (PageNumber - 1) * 50;
-            List<opportunity>  oppList = [SELECT Id, Auto_Shopper__r.Name, Card_Number__c, Vehicle_VIN__c
-                                          FROM Opportunity 
-                                          WHERE Card_Number__c = :memberLoanId
-                                          LIMIT 1];
-            
-            Opportunity opp = oppList.size() > 0 ? oppList[0] : null;
-            if(opp == null){
-                wrapper.error = new Map<String, String>{'Message' => 'No Opportunity found with the provided LoanId'};
-                    wrapper.success = new SuccesWrapper();
-                sendErrorEmail('failed to process requestAskDealerResponse.', 'No Opportunity found with the provided LoanId.<br/>Request Type: Test Drive Response<br/>VIN: '+vehicleVIN+'<br/>LoanId: '+memberLoanId);
-                return wrapper;       
-            }
-            List<Garage__c> garList = [SELECT Id, Name, VIN__c, FastPass_Dealer_Id__c,Pending_Requests__c,Pending_Request_JSON__c  From Garage__c WHERE VIN__c =:vehicleVIN AND FastPass_Dealer_Id__c =: dealerMarketcheckId LIMIT 1];
-            Garage__c gar = garList.size() > 0 ? garList[0] : null;
-            if(gar == null){
-                wrapper.error = new Map<String, String>{'Message' => 'No Vehicle found in garage'};
-                    wrapper.success = new SuccesWrapper();
-                sendErrorEmail('failed to process requestAskDealerResponse.', 'No Vehicle found in garage.<br/>Request Type: Test Drive Response<br/>VIN: '+vehicleVIN+'<br/>Opportunity Id: '+opp.Id);
-                return wrapper;       
-            }
-            String subjectPattern = 'Query requested by ' + opp.Auto_Shopper__r.Name +' for ' +'#'+opp.Card_Number__c + ' in #' +  vehicleVIN;
-            List<EmailMessage> allEmails = [
-                SELECT Id, Subject, FromAddress, ToAddress, Status, HtmlBody, TextBody, CreatedDate
-                FROM EmailMessage
-                WHERE RelatedToId = :gar.Id
-                AND Subject LIKE :('%' + subjectPattern + '%')
-                ORDER BY CreatedDate DESC];
-            
-            // Map to track unique combinations of HtmlBody and Date for specific phrases
-            Map<String, Date> uniqueEmailsMap = new Map<String, Date>();
-            List<EmailMessage> uniqueEmails = new List<EmailMessage>();
-            Set<Id> emailIds = new Set<Id>();
-            system.debug('All mails:: '+ allEmails);
-            for (EmailMessage email : allEmails) {
-                // Extracting the date part of CreatedDate
-                Date emailDate = email.CreatedDate.date();
-                // Checking the email body for the Member Response Or Member Query
-                Boolean isMemberQueryOrResponse = email.TextBody != null && 
-                    email.TextBody.contains('Member Query:');
-                
-                if (isMemberQueryOrResponse) {
-                    // For emails with "Member Query:", check for duplicates
-                    String uniqueKey = email.TextBody + '|' + emailDate;
-                    system.debug('Unique key (Member Query):: ' + uniqueKey);
-                    
-                    if (!uniqueEmailsMap.containsKey(uniqueKey)) {
-                        uniqueEmailsMap.put(uniqueKey, emailDate);
-                        uniqueEmails.add(email);
-                        emailIds.add(email.Id);
-                    }
-                } else if (email.HtmlBody != null && email.HtmlBody.contains('Dealer Response:')) {
-                    // Include emails with "Dealer Response:" directly
-                    uniqueEmails.add(email);
-                    emailIds.add(email.Id);
-                }
-            }
-            
-            List<EmailMessage> filteredMails = [SELECT Id, Subject, FromAddress, ToAddress, Status, HtmlBody, TextBody, CreatedDate FROM EmailMessage WHERE Id IN : emailIds ORDER BY CreatedDate DESC LIMIT 50 OFFSET :index];
-            List<AggregateResult> coverastionCount = [SELECT COUNT(id) total FROM EmailMessage WHERE Id IN : emailIds];
-            integer count = 0;
-            
-            if (!coverastionCount.isEmpty()) {
-                count = (Integer) coverastionCount[0].get('total');
-            }
-            
-            Decimal totalPages = count <= 50 ? 1: Math.ceil(count/50.0);
-            Map<String, DateTime> pendingReqDTMap = new Map<String, DateTime>();
-            if(filteredMails.size() > 0){
-                if(gar.Pending_Request_JSON__c != null){
-                    Map<String, object> dataMap = (Map<String, object>) JSON.deserializeUntyped(gar.Pending_Request_JSON__c );
-                    if(dataMap.containsKey('askDealer')){
-                        String testDriveJson = JSON.serialize(dataMap.get('askDealer'));
-                        List<FastPassIntegrationService.CreateResponseWrapperSuccess> conversations = (List<FastPassIntegrationService.CreateResponseWrapperSuccess>) JSON.deserialize(testDriveJson, List<FastPassIntegrationService.CreateResponseWrapperSuccess>.class);
-                        if(conversations.size() > 0){
-                            for(FastPassIntegrationService.CreateResponseWrapperSuccess eachConversation:conversations){
-                                if(eachConversation.EmailMessage != null && eachConversation.CreatedDate != null ){
-                                    pendingReqDTMap.put(eachConversation.EmailMessage, eachConversation.CreatedDate );
-                                }
-                            }
-                        }
-                    } 
-                }
-            }
-            
-            
-            List<CreateResponseWrapperSuccess> conversations = new List<CreateResponseWrapperSuccess>();
-            for (EmailMessage email : filteredMails) {
-                CreateResponseWrapperSuccess emailDetails = new CreateResponseWrapperSuccess();
-                emailDetails.VehicleVIN = VehicleVIN;
-                emailDetails.LoanId = memberLoanId;
-                emailDetails.MarketCheckId = dealerMarketcheckId;
-                emailDetails.CreatedDate = email.CreatedDate;
-                String emailBody = email.HtmlBody;
-                if(emailBody.contains('Dealer Response:')){
-                    system.debug('Email Body::'+emailBody);
-                    String dealerResponse = emailBody.substringBetween('Dealer Response: ', '</body>');
-                    if(dealerResponse!=null){
-                        dealerResponse = dealerResponse.replaceAll('<[^>]*>', '');
-                        dealerResponse = dealerResponse.replaceAll('\n', '');
-                        dealerResponse = decodeHtmlEntities(dealerResponse);
-                        emailDetails.EmailMessage = dealerResponse;
-                    } else {
-                        dealerResponse = emailBody.substringAfter('Dealer Response: ');
-                        emailDetails.EmailMessage = dealerResponse;
-                    }
-                    
-                    emailDetails.Sender = 'Dealer';
-                } else if(emailBody.contains('Member Query:')){
-                    String memberQuery = emailBody.substringBetween('Member Query:', 'Please <a href="');
-                    if(memberQuery!=null){
-                        memberQuery = memberQuery.replaceAll('<[^>]*>', '');
-                        memberQuery = memberQuery.replaceAll('\n', '');
-                        memberQuery = decodeHtmlEntities(memberQuery);
-                        emailDetails.EmailMessage = memberQuery;
-                    }
-                    emailDetails.Sender = 'Member';    
-                }
-                if(pendingReqDTMap.ContainsKey(emailDetails.EmailMessage)){
-                    emailDetails.CreatedDate = pendingReqDTMap.get(emailDetails.EmailMessage);
-                }
-                conversations.add(emailDetails);  
-            }
-			
-			System.debug('filteredMails');
-            if(filteredMails.size() == 0 && gar.Pending_Requests__c != null && gar.Pending_Request_JSON__c != null && pageNumber == 1 ) {
-                System.debug('filteredMails');
-                List<String> pendingEmails = gar.Pending_Requests__c.split(';;');
-                System.debug('filteredMails  '+ pendingEmails.size());
-                
-              
-                Map<String, object> data = (Map<String, object>) JSON.deserializeUntyped(gar.Pending_Request_JSON__c );
-                System.Debug(data);
-                
-                if(data.containsKey('askDealer')){
-                    String askDealerJson = JSON.serialize(data.get('askDealer'));
-                    conversations = (List<FastPassIntegrationService.CreateResponseWrapperSuccess>) JSON.deserialize(askDealerJson, List<FastPassIntegrationService.CreateResponseWrapperSuccess>.class);
-                    System.Debug(data.get('askDealer'));
-                }
-            }
-            SuccesWrapper wrapp = new SuccesWrapper();
-            wrapp.message = 'Conversations Fetched Successfully';
-            wrapp.data = conversations;
-            wrapp.currentPage = pageNumber;
-            wrapp.totalPages = (Integer)totalPages;
-            wrapper.success = wrapp;
-            wrapper.error = new Map<String, String>{};
-                return wrapper;
-        }catch(Exception e){
-            wrapper.error = new Map<String, String>{'Message' => 'Somthing went wrong.'};
-                wrapper.success = new SuccesWrapper();
-            String errorMessage = e.getTypeName() + ': ' + e.getMessage() + ' Line: ' + e.getLineNumber();
-            sendErrorEmail('failed to process askDealerResponse.',  errorMessage );
-            return wrapper;
-        }   
-    }
+   
     global class CreateResponseWrapper {
         public SuccesWrapper success;
         public Map<String,String> error;
@@ -1172,6 +881,7 @@ global with sharing class FastPassIntegrationService {
         Public List<CreateResponseWrapperSuccess> data;
         Public integer currentPage;
         Public integer totalPages;
+        Public String chatId;
     }
     
     global class CreateResponseWrapperSuccess {
@@ -1250,4 +960,328 @@ global with sharing class FastPassIntegrationService {
         
         return jsonStr;
     }
+
+    @future(callout=true)
+    public static void getAccessToken(){
+        Salesforce_API__mdt metaSFAPI = Salesforce_API__mdt.getInstance('Salesforce_API');
+        if(metaSFAPI == null || ( metaSFAPI != null && (String.isBlank(metaSFAPI.Client_Id__c) || String.isBlank(metaSFAPI.Client_Secret__c) || String.isBlank(metaSFAPI.refresh_token__c))) ){
+            String errorMessage = 'MetaData has Empty or Blank value while refreshToken';
+           // sendErrorEmail('Salesforce API - MetaData has Blank Value', errorMessage);
+            return;
+        }
+        String clientID = metaSFAPI.Client_Id__c;
+        String secret = metaSFAPI.Client_Secret__c;
+        String baseUrl = metaSFAPI.Base_Url__c;
+        String refresh = metaSFAPI.refresh_token__c;
+        
+        String body ='grant_type=refresh_token'+'&client_secret='+secret+'&client_id='+clientID+'&refresh_token='+refresh;
+        String EP = baseUrl+'/services/oauth2/token';
+        
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        HttpResponse response = new HttpResponse();
+        
+        request.setMethod('POST');
+        request.setBody(body);
+        request.setEndpoint(EP);
+        try{
+            response = http.send(request);
+            if(response.getStatusCode() == 200){
+                system.debug('Response Body :: ' + response.getBody());
+                Map<String,Object> bodyMap = (Map<String,Object>)JSON.deserializeUntyped(response.getBody());
+                system.debug('bodyMap::'+bodyMap);
+                system.debug('access_token__c --->'+bodyMap.get('access_token'));
+                String updatedAccessToken = (String) bodyMap.get('access_token'); 
+                system.debug('updatedAccessToken --->'+ updatedAccessToken);
+                Metadata.CustomMetadata customMetadata = new Metadata.CustomMetadata();
+                    customMetadata.fullName = 'Salesforce_API__mdt.'+'Salesforce_API';
+                    customMetadata.label = 'Salesforce_API';
+                    
+                    Metadata.CustomMetadataValue customField1 = new Metadata.CustomMetadataValue();
+                    customField1.field = 'Access_Token__c'; 
+                    customField1.value = updatedAccessToken;
+                    customMetadata.values.add(customField1);
+                    
+                    Metadata.DeployContainer mdContainer = new Metadata.DeployContainer();
+                    mdContainer.addMetadata(customMetadata);
+                    if(!Test.isRunningTest()){
+                        Metadata.Operations.enqueueDeployment(mdContainer, null);
+                    }
+            }
+            else{
+                system.debug('Response Body :: ' + response.getBody());
+                String errorMessage = 'Status: '+response.getStatus()+'<br/>Status Code: '+response.getStatuscode()+'<br/>Message: '+response.getBody()+'<br/>User: '+Userinfo.getUserId();
+                sendErrorEmail('Salesforce API - Refresh Failed', errorMessage);
+            }
+        }
+        catch(exception e){
+            system.debug(e.getMessage());
+            String errorMessage = 'Status: '+response.getStatus()+'<br/>Status Code: '+response.getStatuscode()+'<br/>Message: '+response.getBody()+'<br/>Exeception: '+e.getMessage()+'<br/>Line: '+e.getLineNumber()+'<br/>Type: '+e.getTypeName()+'<br/>User: '+Userinfo.getUserId();
+            System.debug(System.LoggingLevel.DEBUG, 'Exeception: '+e.getMessage()+' \nErrorMessage: '+errorMessage);
+            sendErrorEmail('Salesforce API - Refresh Failed', errorMessage);
+        }
+        
+    }
+    public static void sendNotification(String title, String body, string targetId, Set<String> userIdSet){
+        List<CustomNotificationType> notificationTypeList = [SELECT Id, DeveloperName FROM CustomNotificationType WHERE DeveloperName='SMS_Notification' Limit 1];
+        Set<String> recipientUserIdSet = new Set<String>();
+        if(notificationTypeList.size() > 0){
+            CustomNotificationType notificationType = notificationTypeList[0];
+            // Create a new custom notification
+            Messaging.CustomNotification notification = new Messaging.CustomNotification();
+            notification.setTitle(title);
+            notification.setBody(body);
+            notification.setNotificationTypeId(notificationType.Id);
+            notification.setTargetId(targetId);
+            if(userIdSet == null){
+                List<String> userNameList = System.Label.Users_to_notify_member_query.split(',');
+                if(userNameList.size() > 0){
+                    List<User> usersToSend = [SELECT Id, Username FROM user WHERE Username IN :userNameList ];
+                    //Map<Id,User> userMap = new Map<Id,User>([SELECT Id, Username FROM user WHERE Username IN :userNameList ]);
+                    System.debug('userIdSet :: '+ userIdSet);
+                    for(User each : usersToSend){
+                        System.debug('userIdSet :: '+ userIdSet);
+                        recipientUserIdSet.add(each.Id);
+                    }
+                } 
+            }
+            else{
+                 recipientUserIdSet = userIdSet ;
+            }
+            
+                
+            if(recipientUserIdSet.size() > 0){
+                System.Debug('Notificaation send');
+                notification.send(recipientUserIdSet);
+            
+                
+            }
+        
+        }
+    }
+    public static CreateResponseWrapper sendRightSwipeNotification(Map<String, Object> requestBody){
+        CreateResponseWrapper wrapper = new CreateResponseWrapper();
+        try{
+            String memberLoanId = (String) requestBody.get('LoanId');
+            String dealerMarketcheckId = (String) requestBody.get('FastPassDealerId');
+            String vehicleVIN = (String) requestBody.get('VehicleVIN');
+            String testDriveDateTime = (String) requestBody.get('TestDriveDate');
+            String vehicleName = (String) requestBody.get('VehicleName');
+            String memberQuery = (String) requestBody.get('MemberQuery');
+            Integer fastpassVehicleId = (Integer.valueOf(requestBody.get('FastpassVehicleId')));
+            String chatId = (String) requestBody.get('ChatId');
+
+            List<String> blankFields = new List<String>();
+            List<Contact> conList;
+            List<Lead> leadList;
+            Lead lead;
+            String dealerName;
+            String memberName;
+            
+            if (String.isBlank(memberLoanId)) {
+                blankFields.add('LoanId');
+            }
+            if (String.isBlank(dealerMarketcheckId)) {
+                blankFields.add('FastPassDealerId');
+            }
+            if (String.isBlank(vehicleVIN)) {
+                blankFields.add('vehicleVIN');
+            }
+            if (String.isBlank(VehicleName)) {
+                blankFields.add('VehicleName');
+            }
+            if ((FastpassVehicleId == null)) {
+                blankFields.add('FastpassVehicleId');
+            }
+            if (String.isBlank(memberQuery)){
+                blankFields.add('MemberQuery');
+            }
+            if (!blankFields.isEmpty()) {
+                String nullFields = String.join(blankFields, ', ');
+                wrapper.error = new Map<String, String>{
+                    'Error' => 'Required fields are missing: ' + nullFields
+                        };
+                            wrapper.success = new SuccesWrapper();
+                sendErrorEmail('failed to process defaultMemberMessage.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Ask Dealer Request');
+                return wrapper;
+            }
+
+            List<Opportunity> oppList = [SELECT Id, Name, Auto_Shopper__c, Vehicle_VIN__c, Auto_Shopper__r.Name, Card_Number__c, Auto_Shopper__r.FirstName, Auto_Shopper__r.Email
+                                         FROM Opportunity 
+                                         WHERE Card_Number__c = :memberLoanId LIMIT 1];
+            
+            Opportunity opp = oppList.size() > 0 ? oppList[0] : null;
+            if (opp == null) {
+                wrapper.error = new Map<String, String>{'Message' => 'No matching opportunity found for the provided LoanId'};
+                    wrapper.success = new SuccesWrapper();
+                sendErrorEmail('failed to process defaultMemberMessage.', 'No matching opportunity found for the provided LoanId.<br/>Request Type: Test Drive<br/>VIN: '+vehicleVIN+'<br/>Vehicle Name: '+vehicleName+'<br/>LoanId: '+memberLoanId);
+                return wrapper;
+            }
+            MemberName = opp.Auto_Shopper__r.FirstName;
+            List<Account> accList = [SELECT Id, Name, FastPass_Dealer_Id__c, Manager_Name__c, Manager_Email__c, RecordType.DeveloperName 
+                                     FROM Account 
+                                     WHERE RecordType.DeveloperName = 'Auto_Dealer' 
+                                     AND FastPass_Dealer_Id__c =: dealerMarketcheckId
+                                     LIMIT 1];
+            Account acc = accList.size() > 0 ? accList[0] : null;
+            List<String> sendTo = new List<String>();
+            List<String> smsPhoneList = new List<String>();
+            if (acc <> null) {
+                dealerName = acc.Name;
+                conList = [SELECT Id, AccountId, Name, Email,Phone, RecordType.DeveloperName from Contact Where AccountId =:acc.Id AND RecordType.DeveloperName = 'Auto_Dealer_Pro' AND Active__c = true order by CreatedDate asc];
+                for(Contact each : conList){
+                    sendTo.add(each.Email);
+                    if(each.Phone != null){
+                        smsPhoneList.add(each.phone);
+                    }
+                }
+            }
+            else{
+                leadList = [SELECT Id, FastPass_Dealer_Id__c, Manager_Name__c, Manager_Email__c, Dealer_Pro_1_Email__c, Dealer_Pro_2_Email__c, Dealer_Pro_3_Email__c, Company,Dealer_Pro_1_Phone__c, Dealer_Pro_2_Phone__c, Dealer_Pro_3_Phone__c FROM Lead WHERE FastPass_Dealer_Id__c =: dealerMarketcheckId];
+                lead = leadList.size() > 0 ? leadList[0] : null;
+                if(lead != null){
+                    if(lead.Dealer_Pro_1_Email__c != null){
+                        sendTo.add(lead.Dealer_Pro_1_Email__c);
+                        if(lead.Dealer_Pro_1_Phone__c != null){
+                            smsPhoneList.add(lead.Dealer_Pro_1_Phone__c);
+                        }
+                    }
+                    if(lead.Dealer_Pro_2_Email__c != null){
+                        sendTo.add(lead.Dealer_Pro_2_Email__c);
+                        if(lead.Dealer_Pro_2_Phone__c != null){
+                            smsPhoneList.add(lead.Dealer_Pro_2_Phone__c);
+                        }
+                    }
+                    if(lead.Dealer_Pro_3_Email__c != null){
+                        sendTo.add(lead.Dealer_Pro_3_Email__c);
+                        if(lead.Dealer_Pro_3_Phone__c != null){
+                            smsPhoneList.add(lead.Dealer_Pro_3_Phone__c);
+                        }
+                    }
+                }
+            }
+            List<Garage__c> garageList = [SELECT Id, Name, VIN__c, Pending_Requests__c, Pending_Request_JSON__c, FastPass_Vehicle_Id__c, Chat_Id__c from Garage__c WHERE FastPass_Vehicle_Id__c =: fastpassVehicleId AND Opportunity__c =: opp.Id ];
+            Garage__c garage = garageList.size() > 0 ? garageList[0] : null; 
+            if (garage == null) {
+                wrapper.error = new Map<String, String>{'Message' => 'No matching Vehicle found for the provided Fastpass Vehicle Id'};
+                    wrapper.success = new SuccesWrapper();
+                sendErrorEmail('failed to process defaultMemberMessage.', 'No matching Vehicle found for the provided Fastpass Vehicle Id.<br/>Request Type: Default Member Message<br/>VIN: '+vehicleVIN+'<br/>Vehicle Name: '+vehicleName+'<br/>LoanId: '+memberLoanId);
+                return wrapper;
+            }
+
+            String dealerportalURL = system.label.Dealer_Portal_Page_URL;
+            Map<String, Object> params = new Map<String, Object>();
+            params.put('opportunityId', opp.Id);
+            params.put('dealerId', dealerMarketcheckId);
+            params.put('vehicleVin', vehicleVIN);
+            params.put('vehicleName', vehicleName);
+            params.put('type', 'testDrive');
+            params.put('linkSharedDate', Date.today());
+            params.put('garageId', garage.Id);
+            params.put('fastpassVehicleId', fastpassVehicleId);
+            // Convert to JSON string
+            String jsonParams = JSON.serialize(params);
+            String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
+            
+            List<EmailTemplate> emailTemplates = [SELECT Id, Name, Subject, HtmlValue, body, DeveloperName 
+                                                FROM EmailTemplate 
+                                                WHERE DeveloperName = 'Right_Swipe_Automation_Email'];
+
+            if(sendTo.size() == 0){
+            CreateResponseWrapperSuccess emailDetails = new CreateResponseWrapperSuccess();
+            emailDetails.VehicleVIN = VehicleVIN;
+            emailDetails.LoanId = memberLoanId;
+            emailDetails.MarketCheckId = dealerMarketcheckId;
+            emailDetails.Sender = 'Member';
+            emailDetails.CreatedDate = System.now();
+            emailDetails.EmailMessage = MemberQuery;
+            Garage__c updateGarageRecord = new Garage__c();
+            updateGarageRecord.Id = garage.Id;
+            updateGarageRecord.Pending_Request_JSON__c = processPendingReqJson(garage.Pending_Request_JSON__c, 'testDrive', JSON.serialize(emailDetails));
+            EmailTemplate emailTemp = emailTemplates[0];
+                List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
+                Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+                
+                String subject = emailTemp.Subject;
+                String body = emailTemp.HtmlValue;
+                body = body.replace('{firstMessage}', MemberQuery);
+                body = body.replace('{Link}', '<a href="' +conLink+ '">click here</a>');
+                List<String> emailIdsiLst;
+                email.setToAddresses(sendTo);
+                email.setSubject(subject);
+                email.setHtmlBody(body);
+                email.setSaveAsActivity(true); 
+            if(garage.Pending_Requests__c <> null){
+                updateGarageRecord.Pending_Requests__c = garage.Pending_Requests__c + ';; Subject++'+email.getSubject()+'Body++'+email.getHtmlBody()+'Type++ testDrive';
+            }
+            else{
+                updateGarageRecord.Pending_Requests__c = 'Subject++'+email.getSubject()+'Body++'+email.getHtmlBody()+'Type++ testDrive'  ;
+                
+            }
+            if(chatId != null){
+                updateGarageRecord.Chat_Id__c = chatId;
+            }
+            update updateGarageRecord;
+
+            }
+            
+            if(emailTemplates.size ()> 0 && sendTo.size()> 0){
+                EmailTemplate emailTemp = emailTemplates[0];
+                List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
+                Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+                
+                String subject = emailTemp.Subject;
+                String body = emailTemp.HtmlValue;
+                body = body.replace('{firstMessage}', MemberQuery);
+                body = body.replace('{Link}', '<a href="' +conLink+ '">click here</a>');
+                List<String> emailIdsiLst;
+                email.setToAddresses(sendTo);
+                email.setSubject(subject);
+                email.setHtmlBody(body);
+                email.setSaveAsActivity(true);
+                email.setWhatId(garage.Id);
+                emailList.add(email);
+                if(!Test.isRunningTest() && emailList.size()>0){
+                    Messaging.sendEmail(emailList);
+                }
+                if(chatId != null){
+                    Garage__c updateGarageRecord = new Garage__c();
+                    updateGarageRecord.Id = garage.Id;
+                    updateGarageRecord.Chat_Id__c = chatId;
+                    update updateGarageRecord;
+                }
+                
+
+            }
+            if(smsPhoneList.size()>0){
+                System.debug('Inside SMS Sending');
+                List<tdc_tsw__Message_Template__c> smsTemplate = [SELECT Id, tdc_tsw__SMSBodyNew__c FROM tdc_tsw__Message_Template__c WHERE Name = 'Right_Swipe_Automation_SMS'];
+                String messageText = smsTemplate.size()>0 ? smsTemplate[0].tdc_tsw__SMSBodyNew__c : null;
+                if(messageText != null){
+                    messageText = messageText.replace('{firstMessage}', MemberQuery);
+                    messageText = messageText.replace('{Link}', conLink);
+                    for(String phone : smsPhoneList){
+                        tdc_tsw.GlobalSMSSender.SendSmsWithPhoneNumberAndMessageText(phone,messageText,garage.Id) ;
+                        System.debug('SMS was sent');
+                    }
+                }
+            }
+            SuccesWrapper wrapp = new SuccesWrapper();
+                wrapp.message = 'Default Member Message request sent successfully';
+                wrapp.data = new List<CreateResponseWrapperSuccess>();
+                wrapper.success = wrapp;
+                wrapper.error = new Map<String, String>{};
+
+    }
+    catch(Exception e){
+        wrapper.error = new Map<String, String>{'Message' => 'Somthing went wrong.'};
+        wrapper.success = new SuccesWrapper();
+        String errorMessage = e.getTypeName() + ': ' + e.getMessage() + ' Line: ' + e.getLineNumber();
+        sendErrorEmail('failed to process defaultMemberMessage.',  errorMessage );
+        return wrapper;
+    }
+    return wrapper;
+	}
+   
+    
 }

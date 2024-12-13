@@ -17,6 +17,10 @@ global without sharing class AzureIntegrationService {
                 wrapper = createOpportunities();
             }else if(action=='CreateDealerData' || action=='CreateBankData'){
                 wrapper = createAccounts();
+            }else if(action=='CreateLeadDealerData' || action=='CreateLeadBankData'){
+                wrapper = createLeads();
+            }else if(action=='UpsertDealerData'){
+                wrapper = upsertDealer();
             }else{
                 wrapper.error = new Map<String,String>{'NOT_FOUND'=>'Could not find a match for URL'};
                     wrapper.success = new Map<String,String>();
@@ -267,11 +271,409 @@ global without sharing class AzureIntegrationService {
         return wrapper;
     }
     
+    public static CreateResponseWrapper createLeads(){
+        RestRequest req = RestContext.request;
+        String action = req.requestURI.substring(req.requestURI.lastIndexOf('/')+1);
+        CreateResponseWrapper wrapper = new CreateResponseWrapper();
+        // Deserialize the JSON request body into a list of Contact records
+        List<Lead> leadList = (List<Lead>)JSON.deserialize(req.requestBody.tostring(), List<Lead>.class);
+        Map<String,String> successData = new Map<String,String>();
+        Map<String,String> errorData = new Map<String,String>();
+        if(!leadList.isEmpty()){
+            String recTypeName = action=='CreateLeadDealerData' ? 'Dealer' : 'Credit_Union';
+            RecordType accRecType = [SELECT Id, Name, DeveloperName, SobjectType FROM RecordType where SobjectType = 'Lead' and DeveloperName=:recTypeName];
+            //assign record type
+            for(Lead each : leadList){
+                each.RecordTypeId = accRecType!=null ? accRecType.Id : null;
+                if(each.LastName == null){
+                    each.LastName = each.Company;
+                }
+            }
+            
+            List<Database.SaveResult> results = Database.insert(leadList, false);
+            DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results);
+            Set<Id> successIds = resultsWrapper.successIds;
+            if(errorData.isEmpty()){
+                errorData = resultsWrapper.error;
+            }else if(!resultsWrapper.error.isEmpty()){
+                for(String error : resultsWrapper.error.keySet()){
+                    if(errorData.containsKey(error)){
+                        String temp = errorData.get(error);
+                        if(temp!=resultsWrapper.error.get(error))
+                            temp += resultsWrapper.error.get(error);
+                        errorData.put(error, temp);
+                    }else
+                        errorData.put(error, resultsWrapper.error.get(error));
+                }
+            }
+            if(!successIds.isEmpty()){
+                for(Lead each : leadList){
+                    if(successIds.contains(each.Id)){
+                        successData.put(each.Company, each.Id);
+                    }
+                }
+            }
+        }
+        wrapper.success = successData;
+        wrapper.error = errorData;
+        System.debug('successData: '+successData);
+        System.debug('errorData: '+errorData);
+        return wrapper;
+    }
+    public static CreateResponseWrapper upsertDealer(){
+        RestRequest req = RestContext.request;
+        String action = req.requestURI.substring(req.requestURI.lastIndexOf('/')+1);
+        CreateResponseWrapper wrapper = new CreateResponseWrapper();
+        // Deserialize the JSON request body into a list of Contact records
+        List<Object> objList = (List<Object>) JSON.deserializeUntyped(req.requestBody.tostring());
+
+        Set<String> fpDealerIdSet = new Set<String>();
+        Map<String,String> fpDealerIdAccIdMap = new Map<String,String>();
+        Map<String,String> fpDealerIdLeadIdMap = new Map<String,String>();
+        List<Object> accObjList = new List<Object>();
+        List<Object> leadObjList = new List<Object>();
+        String queryFields = null;
+        String LeadQueryFields = null;
+        Set<String> queryFieldsList;
+        List<String> leadQueryFieldsList;
+
+        for(Object each : objList){
+            Map<String, Object> eachMap = (Map<String, Object>) each;
+            String fastPassDealerId = (String) eachMap.get('FastPass_Dealer_Id__c');
+            fpDealerIdSet.add(fastPassDealerId);
+            if(queryFields == null){
+                queryFields = String.join(eachMap.keySet(), ',');
+                queryFieldsList = eachMap.keySet();
+            }
+        }
+        if(queryFields != null ){
+            leadQueryFieldsList = queryFields.split(',');
+            leadQueryFieldsList.add('Company');
+            if(leadQueryFieldsList.contains('Name')) 
+                 leadQueryFieldsList[leadQueryFieldsList.indexOf('Name')] = 'LastName';
+            if(leadQueryFieldsList.contains('BillingStreet')) 
+                leadQueryFieldsList[leadQueryFieldsList.indexOf('BillingStreet')] = 'Street';
+            if(leadQueryFieldsList.contains('BillingCity')) 
+                leadQueryFieldsList[leadQueryFieldsList.indexOf('BillingCity')] = 'City';
+            if(leadQueryFieldsList.contains('BillingState')) 
+                leadQueryFieldsList[leadQueryFieldsList.indexOf('BillingState')] = 'State';
+            if(leadQueryFieldsList.contains('BillingPostalCode')) 
+                leadQueryFieldsList[leadQueryFieldsList.indexOf('BillingPostalCode')] = 'PostalCode';
+            if(leadQueryFieldsList.contains('BillingCountry')) 
+                leadQueryFieldsList[leadQueryFieldsList.indexOf('BillingCountry')] = 'Country';
+            if(leadQueryFieldsList.contains('BillingLatitude')) 
+                leadQueryFieldsList[leadQueryFieldsList.indexOf('BillingLatitude')] = 'Latitude';
+            if(leadQueryFieldsList.contains('BillingLongitude')) 
+                leadQueryFieldsList[leadQueryFieldsList.indexOf('BillingLongitude')] = 'Longitude';
+            if(leadQueryFieldsList.contains('BillingGeocodeAccuracy')) 
+                leadQueryFieldsList[leadQueryFieldsList.indexOf('BillingGeocodeAccuracy')] = 'GeocodeAccuracy';
+            if(leadQueryFieldsList.contains('Email__c')) 
+                leadQueryFieldsList[leadQueryFieldsList.indexOf('Email__c')] = 'Email';
+                if(leadQueryFieldsList.contains('Type')) 
+                leadQueryFieldsList.remove(leadQueryFieldsList.indexOf('Type'));
+                if(leadQueryFieldsList.contains('ParentId')) 
+                leadQueryFieldsList.remove(leadQueryFieldsList.indexOf('ParentId'));
+                if(leadQueryFieldsList.contains('Category__c')) 
+                leadQueryFieldsList.remove(leadQueryFieldsList.indexOf('Category__c'));
+
+
+            LeadQueryFields = String.join(leadQueryFieldsList, ',');
+            System.debug('LeadqueryFields :: '+ LeadQueryFields);
+            
+        }
+        System.debug('queryFields :: '+ queryFields);
+        if(fpDealerIdSet.size() > 0){
+          //  List<Account> accList = [SELECT queryFields FROM Account WHERE FastPass_Dealer_Id__c =: fpDealerIdSet];
+          String query ='SELECT ' + queryFields + ' FROM Account WHERE FastPass_Dealer_Id__c =: fpDealerIdSet';
+          String leadQuery ='SELECT ' + LeadQueryFields + ' FROM Lead WHERE FastPass_Dealer_Id__c =: fpDealerIdSet AND IsConverted = false';
+
+          List<Account> accList = Database.query(query);
+          Map<Id, Account> accMap = new Map<Id, Account>(accList);
+          List<Lead> leadList = Database.query(leadQuery);
+          Map<Id, Lead> leadMap = new Map<Id, Lead>(leadList);
+          //  List<Lead> leadList = [SELECT Id, FastPass_Dealer_Id__c FROM Lead WHERE FastPass_Dealer_Id__c =: fpDealerIdSet AND IsConverted = false];
+            RecordType leadRecType = [SELECT Id, Name, DeveloperName, SobjectType FROM RecordType where SobjectType = 'Lead' and DeveloperName = 'Dealer' ];
+
+            for(Account each : accList){
+                fpDealerIdAccIdMap.put(each.FastPass_Dealer_Id__c, each.Id);
+            }
+            for(Lead each : leadList){
+                fpDealerIdLeadIdMap.put(each.FastPass_Dealer_Id__c, each.Id);
+            }
+            for(Object each : objList){
+                Map<String, Object> eachMap = (Map<String, Object>) each;
+                String fastPassDealerId = (String) eachMap.get('FastPass_Dealer_Id__c');
+                if(fpDealerIdAccIdMap.containsKey(fastPassDealerId)){
+                    accObjList.add(each);
+                }else{
+                    eachMap.put('LastName', eachMap.get('Name'));
+                    eachMap.put('Company', eachMap.get('Name'));
+                    eachMap.put('Street', eachMap.get('BillingStreet'));
+                    eachMap.put('City', eachMap.get('BillingCity'));
+                    eachMap.put('State', eachMap.get('BillingState'));
+                    eachMap.put('PostalCode', eachMap.get('BillingPostalCode'));
+                    eachMap.put('Country', eachMap.get('BillingCountry'));
+                    eachMap.put('Latitude', eachMap.get('BillingLatitude'));
+                    eachMap.put('Longitude', eachMap.get('BillingLongitude'));
+                    eachMap.put('GeocodeAccuracy', eachMap.get('BillingGeocodeAccuracy'));
+                    leadObjList.add(each);
+                }
+            }
+            Map<String,String> successData = new Map<String,String>();
+            Map<String,String> errorData = new Map<String,String>();
+            if(accObjList.size() > 0){
+                List<Account> updateAccList = new  List<Account>();
+                for(Object each : objList){
+                    Map<String, Object> eachMap = (Map<String, Object>) each;
+                    if(fpDealerIdAccIdMap.containsKey((String)(eachMap.get('FastPass_Dealer_Id__c')))){
+                    Account acc = new Account();
+                    
+                        acc.Id =  fpDealerIdAccIdMap.get((String)(eachMap.get('FastPass_Dealer_Id__c')));
+                        acc.Bypass_Validation__c = true;
+                        acc.Name = (String)eachMap.get('Name');
+                    
+                    for(String eachQueryField : queryFieldsList){
+                            if(eachMap.keySet().contains(eachQueryField)){
+                                
+                                    String accountId = (string)(eachMap.get('FastPass_Dealer_Id__c'));
+                                    String accountJson = JSON.serialize(accMap.get(fpDealerIdAccIdMap.get(accountId)));
+                                    Object accObj = (Object) JSON.deserializeUntyped(accountJson);
+                                    Map<String, Object> accEachObjMap = (Map<String, Object>) accObj;
+                                    
+                                    if(accEachObjMap.ContainsKey(eachQueryField) && accEachObjMap.get(eachQueryField) != eachMap.get(eachQueryField) && (accEachObjMap.get(eachQueryField) == 'null' || accEachObjMap.get(eachQueryField) == null || accEachObjMap.get(eachQueryField) == '' )){
+                                        acc.put(eachQueryField, eachMap.get(eachQueryField));
+                                        System.debug('Field Name :: '+ eachQueryField);
+                                        System.debug('old Value :: '+ accEachObjMap.get(eachQueryField));
+                                        System.debug('New Value :: '+ eachMap.get(eachQueryField));
+                                    }
+                                
+                            }
+                    }
+                    updateAccList.add(acc);
+                }
+                }
+                List<Database.SaveResult> results = Database.update(updateAccList, false);
+                    List<Account> accValUpdateList = new List<Account>();
+                    for(Account each : updateAccList){
+                        each.Bypass_Validation__c = false;
+                        accValUpdateList.add(each);
+                    }
+                    Database.update(accValUpdateList, false);
+
+                    DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results);
+                    Set<Id> successIds = resultsWrapper.successIds;
+                    if(errorData.isEmpty()){
+                        errorData = resultsWrapper.error;
+                    }else if(!resultsWrapper.error.isEmpty()){
+                        for(String error : resultsWrapper.error.keySet()){
+                            if(errorData.containsKey(error)){
+                                String temp = errorData.get(error);
+                                if(temp!=resultsWrapper.error.get(error))
+                                    temp += resultsWrapper.error.get(error);
+                                errorData.put(error, temp);
+                            }else
+                                errorData.put(error, resultsWrapper.error.get(error));
+                        }
+                    }
+                    if(!successIds.isEmpty()){
+                        for(Account each : updateAccList){
+                            if(successIds.contains(each.Id)){
+                                successData.put(each.Name, each.Id);
+                            }
+                        }
+                    }
+            }
+
+            if(leadObjList.size() > 0){
+                List<Lead> upsertLeadList = new  List<Lead>();
+                for(Object each : objList){
+                    Map<String, Object> eachMap = (Map<String, Object>) each;
+                    Lead lead = new Lead();
+                    System.debug('fpDealerIdLeadIdMap :: '+ fpDealerIdLeadIdMap);
+                    if(fpDealerIdLeadIdMap.containsKey((String)(eachMap.get('FastPass_Dealer_Id__c')))){
+                        lead.Id =  fpDealerIdLeadIdMap.get((String)(eachMap.get('FastPass_Dealer_Id__c')));
+                        lead.put('Company', ((String) eachMap.get('Company')));
+                        for(String eachQueryField : leadQueryFieldsList){
+
+                            if(eachMap.keySet().contains(eachQueryField)){
+                                if(fpDealerIdLeadIdMap.containsKey((string)eachMap.get('FastPass_Dealer_Id__c'))){
+                                    String leadId = (string)(eachMap.get('FastPass_Dealer_Id__c'));
+                                    String leadJson = JSON.serialize(leadMap.get(fpDealerIdLeadIdMap.get(leadId)));
+                                    Object leadObj = (Object) JSON.deserializeUntyped(leadJson);
+                                    Map<String, Object> leadEachObjMap = (Map<String, Object>) leadObj;
+                                    
+                                    if(leadEachObjMap.containsKey(eachQueryField) && leadEachObjMap.get(eachQueryField) != eachMap.get(eachQueryField) && eachMap.get(eachQueryField) != null && (leadEachObjMap.get(eachQueryField) == 'null' || leadEachObjMap.get(eachQueryField) == null || leadEachObjMap.get(eachQueryField) == '' )){
+                                        System.debug('Field Name :: '+ eachQueryField);
+                                        System.debug('old Value :: '+ leadEachObjMap.get(eachQueryField));
+                                        System.debug('New Value :: '+ eachMap.get(eachQueryField));
+
+
+                                        Schema.SObjectField field = Schema.SObjectType.Lead.fields.getMap().get(eachQueryField);
+                                        Schema.DescribeFieldResult fieldDescribe = field.getDescribe();
+
+                                        // Convert value based on field type
+                                        if (fieldDescribe.getType() == Schema.DisplayType.DOUBLE) {
+                                            lead.put(eachQueryField, Decimal.valueOf((String) eachMap.get(eachQueryField)));
+                                        } else if (fieldDescribe.getType() == Schema.DisplayType.INTEGER) {
+                                            lead.put(eachQueryField, Integer.valueOf((String) eachMap.get(eachQueryField)));
+                                        } else if (fieldDescribe.getType() == Schema.DisplayType.DATE) {
+                                            lead.put(eachQueryField, Date.valueOf((String) eachMap.get(eachQueryField)));
+                                        } else if (fieldDescribe.getType() == Schema.DisplayType.DATETIME) {
+                                            lead.put(eachQueryField, Datetime.valueOf((String) eachMap.get(eachQueryField)));
+                                        } else {
+                                            // For other types, directly assign the value
+                                            lead.put(eachQueryField, eachMap.get(eachQueryField));
+                                        }
+
+                                        //lead.put(eachQueryField, eachMap.get(eachQueryField));
+                                        
+                                    }
+                                }
+                                
+                            }
+                            
+                        }
+                        upsertLeadList.add(lead);
+                        
+                    }
+                    else if(!(fpDealerIdAccIdMap.containsKey((String)(eachMap.get('FastPass_Dealer_Id__c'))))){
+                        Lead newLead = (Lead)JSON.deserialize(JSON.serialize(each), Lead.class);
+                        upsertLeadList.add(newLead);
+                    }
+                }
+            
+                
+                if(upsertLeadList.size() > 0){
+                    System.debug('upsertLeadList.size() :: '+ upsertLeadList.size());
+                    System.debug('upsertLeadList :: '+ upsertLeadList);
+                    
+                  //  Database.upsert(leadUpsertList, false);
+                    List<Database.UpsertResult> results = Database.upsert(upsertLeadList, false);
+                DatabaseSaveResultsWrapper resultsWrapper = processDatabaseUpsertResults(results);
+                Set<Id> successIds = resultsWrapper.successIds;
+                    System.debug('leadUpsertList upsert Success :: ');
+                    if(errorData.isEmpty()){
+                        errorData = resultsWrapper.error;
+                    }else if(!resultsWrapper.error.isEmpty()){
+                        for(String error : resultsWrapper.error.keySet()){
+                            if(errorData.containsKey(error)){
+                                String temp = errorData.get(error);
+                                if(temp!=resultsWrapper.error.get(error))
+                                    temp += resultsWrapper.error.get(error);
+                                errorData.put(error, temp);
+                            }else
+                                errorData.put(error, resultsWrapper.error.get(error));
+                        }
+                    }
+                    if(!successIds.isEmpty()){
+                        for(Lead each : upsertLeadList){
+                            if(successIds.contains(each.Id)){
+                                successData.put(each.Company, each.Id);
+                            }
+                        }
+                    }
+                    System.debug('successData: '+successData);
+                    System.debug('errorData: '+errorData);
+                }
+            }
+            wrapper.success = successData;
+            wrapper.error = errorData;
+        }
+        
+
+        /*
+        List<Account> accList = (List<Account>)JSON.deserialize(req.requestBody.tostring(), List<Account>.class);
+        Map<String,String> successData = new Map<String,String>();
+        Map<String,String> errorData = new Map<String,String>();
+        if(!accList.isEmpty()){
+            RecordType accRecType = [SELECT Id, Name, DeveloperName, SobjectType FROM RecordType where SobjectType = 'Account' and DeveloperName = 'Auto_Dealer' ];
+            //assign record type
+            Set<String> fastpassDealerIdsSet = new Set<String>();
+            for(Account each : accList){
+                fastpassDealerIdsSet.add(each.FastPass_Dealer_Id__c);
+            }
+            if(fastpassDealerIdsSet.size() > 0){
+                List<Account> existingAccList = [Select Id, FastPass_Dealer_Id__c from Account where FastPass_Dealer_Id__c =: fastpassDealerIdsSet];
+                Map<String,String> fpDealerIdMap = new Map<String,String>();
+                if(existingAccList.size() > 0){
+                    for(Account each : existingAccList){
+                        fpDealerIdMap.put(each.FastPass_Dealer_Id__c, each.Id);
+                    }
+                }
+                for(Account each : accList){
+                    if(fpDealerIdMap.containsKey(each.FastPass_Dealer_Id__c)){
+                        each.Id = fpDealerIdMap.get(each.FastPass_Dealer_Id__c);
+                    }
+                    else{
+                        each.RecordTypeId = accRecType!=null ? accRecType.Id : null;
+                    }
+                }
+
+                List<Database.UpsertResult> results = Database.upsert(accList, false);
+                DatabaseSaveResultsWrapper resultsWrapper = processDatabaseUpsertResults(results);
+                Set<Id> successIds = resultsWrapper.successIds;
+                if(errorData.isEmpty()){
+                    errorData = resultsWrapper.error;
+                }else if(!resultsWrapper.error.isEmpty()){
+                    for(String error : resultsWrapper.error.keySet()){
+                        if(errorData.containsKey(error)){
+                            String temp = errorData.get(error);
+                            if(temp!=resultsWrapper.error.get(error))
+                                temp += resultsWrapper.error.get(error);
+                            errorData.put(error, temp);
+                        }else
+                            errorData.put(error, resultsWrapper.error.get(error));
+                    }
+                }
+                if(!successIds.isEmpty()){
+                    for(Account each : accList){
+                        if(successIds.contains(each.Id)){
+                            successData.put(each.Name, each.Id);
+                        }
+                    }
+                }
+            }
+        }
+        wrapper.success = successData;
+        wrapper.error = errorData;
+        System.debug('successData: '+successData);
+        System.debug('errorData: '+errorData); */
+        return wrapper;
+    }
+
     public static DatabaseSaveResultsWrapper processDatabaseSaveResults(List<Database.SaveResult> results){
         DatabaseSaveResultsWrapper wrapper = new DatabaseSaveResultsWrapper();
         Map<String,String> errorData = new Map<String,String>();
         Set<Id> successIds = new Set<Id>();
         for (Database.SaveResult result : results) {
+            if (!result.isSuccess()) {   
+                String error='';
+                for(Database.Error each : result.getErrors()) {
+                    error = each.getMessage() + (each.getFields()!=null ? ' Fields: ' + each.getFields() : '') +';';   
+                    if(errorData.containsKey(each.getStatusCode()+'')){
+                        String temp = errorData.get(each.getStatusCode()+'');
+                        if(temp!=error)
+                            temp += error;
+                        errorData.put(each.getStatusCode()+'', temp);
+                    }else
+                        errorData.put(each.getStatusCode()+'', error);
+                }
+                
+            }else{
+                successIds.add(result.getId());
+            }
+            System.debug('Result:'+result);
+        }
+        wrapper.error = errorData;
+        wrapper.successIds = successIds;
+        return wrapper;
+    }
+
+    public static DatabaseSaveResultsWrapper processDatabaseUpsertResults(List<Database.UpsertResult> results){
+        DatabaseSaveResultsWrapper wrapper = new DatabaseSaveResultsWrapper();
+        Map<String,String> errorData = new Map<String,String>();
+        Set<Id> successIds = new Set<Id>();
+        for (Database.UpsertResult result : results) {
             if (!result.isSuccess()) {   
                 String error='';
                 for(Database.Error each : result.getErrors()) {
@@ -383,6 +785,7 @@ body = body.replace('{exceptionMessage}', exceptionMessage);*/
                             String leadMSRCellPhone = data.containsKey('Lead_MSR_Cell_Phone__c')?((String)data.get('Lead_MSR_Cell_Phone__c')):null;
                             String projectManagerCellPhone = data.containsKey('Project_Manager_Cell_Phone__c')?((String)data.get('Project_Manager_Cell_Phone__c')):null;
                             String fIManagerCellPhone = data.containsKey('F_I_Manager_Cell_Phone__c')?((String)data.get('F_I_Manager_Cell_Phone__c')):null;
+                            Boolean isConverted = data.containsKey('IsConverted')? true:false;
                             
                             if(mobilePhoneNumber != null){
                                 if (mobilePhoneNumber.startsWith('+1')) {
@@ -420,6 +823,10 @@ body = body.replace('{exceptionMessage}', exceptionMessage);*/
                                     data.put('F_I_Manager_Cell_Phone__c', fIManagerCellPhone);
                                 }   
                             } 
+                           /* if(isConverted == true){
+                                data.put('IsConverted', true);
+                            }*/
+                            
                             
                             String sObjName = recordId.getSObjectType().getDescribe().getName();
                             String endpointUrl;
@@ -454,6 +861,19 @@ body = body.replace('{exceptionMessage}', exceptionMessage);*/
                                     }
                                 }
                             }
+                           /* else if (sObjName == 'Lead'){
+                                
+                                List<Lead> leadList = [SELECT Id, Company, RecordType.DeveloperName FROM Lead WHERE Id =: sfId LIMIT 1];
+                                if(leadList.size() > 0){
+                                    Lead lead = leadList[0];
+                                    data.put('Name', lead.company);
+                                    if (lead.RecordType.DeveloperName == 'Dealer') {
+                                        endpointUrl = metaDataField.Update_Dealer__c;
+                                    } else if (lead.RecordType.DeveloperName == 'Credit_Union') {
+                                        endpointUrl = metaDataField.Update_Branch__c;
+                                    }
+                                }
+                            }*/
                             if (endpointUrl != null) {
                                 String requestBody = JSON.serialize(data);
                                 System.debug('Serialized Data::' + requestBody);

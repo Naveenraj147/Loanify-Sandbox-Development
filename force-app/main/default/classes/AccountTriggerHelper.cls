@@ -28,7 +28,7 @@ public class AccountTriggerHelper {
                 }
                 dealerIdToDealerProsEmailMap.get(con.AccountId).add(con.Email);
             }
-              ContactTriggerHelper.sendPendingRequestsToDealer(updatedaccountIds, dealerIdToDealerProsEmailMap);
+              ContactTriggerHelper.sendPendingRequestsToDealer(updatedaccountIds, dealerIdToDealerProsEmailMap, null);
           
         } catch (Exception e){
             String errorMessage = e.getTypeName()+': '+e.getMessage()+' Line: '+e.getLineNumber();

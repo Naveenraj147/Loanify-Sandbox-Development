@@ -71,7 +71,8 @@ public class AccountTriggerHandler {
         List<Account> accList = [select Id,Name,RecordTypeId,RecordType.DeveloperName,Market__c from Account where Id in: newList];
         List<String> serializedDataList = new List<String> ();
         for (Account each : accList) {
-            if ( each.RecordType.DeveloperName == 'Auto_Dealer'|| each.RecordType.DeveloperName == 'Bank' ){
+            
+            if ( newMap.get(each.Id).Bypass_Validation__c == oldMap.get(each.Id).Bypass_Validation__c && each.RecordType.DeveloperName == 'Auto_Dealer'|| each.RecordType.DeveloperName == 'Bank' ){
                 String serializedData = AzureIntegrationService.serializeWithNulls(newMap.get(each.Id)); 
                 serializedDataList.add(serializedData);
             }

@@ -110,12 +110,12 @@ private class FastPassIntegrationServiceTest {
         insert con;
         Opportunity opp = new opportunity(Name = 'Test Opp ', Vehicle_VIN__C = 'VIN645466', ForecastCategoryName ='Omitted', Card_Number__c = '7878678767877898', 	Probability= 0, CloseDate = Date.newInstance(2024, 08, 12), StageName = 'New',  Auto_Shopper__c = con.Id );
 		insert opp;
-        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323'); 
+        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323', FastPass_Vehicle_Id__c = 123); 
         insert gar;
         RestRequest request = new RestRequest();
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
-        request.requestBody = Blob.valueOf('[{"RequestType" : "testDrive", "LoanId" : "7878678767877898", "FastPassDealerId" : "202434" , "VehicleVIN" : "645466", "TestDriveDate" : "2024-06-15T12:44:00.000Z", "VehicleName": "Nissan", "MemberQuery" : "Test Query"}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "askDealer", "LoanId" : "7878678767877898", "FastPassDealerId" : "202434" , "VehicleVIN" : "645466", "TestDriveDate" : "2024-06-15T12:44:00.000Z", "VehicleName": "Nissan", "MemberQuery" : "Test Query","FastpassVehicleId":"123"}]');
         RestContext.request = request;
         List<FastPassIntegrationService.CreateResponseWrapper> responseList = FastPassIntegrationService.doPost();
         System.assertNotEquals(null, responseList);
@@ -131,7 +131,7 @@ private class FastPassIntegrationServiceTest {
         insert con;
         Opportunity opp = new opportunity(Name = 'Test Opp ', Vehicle_VIN__C = 'VIN645466', ForecastCategoryName ='Omitted', Card_Number__c = '7878678767877898', 	Probability= 0, CloseDate = Date.newInstance(2024, 08, 12), StageName = 'New',  Auto_Shopper__c = con.Id );
 		insert opp;
-        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323'); 
+        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323',FastPass_Vehicle_Id__c = 123); 
         insert gar;
         EmailMessage EM =  new EmailMessage(Subject='Test Drive requested by Test Member for #7878678767877898 in #VIN645466', ToAddress='testmanager@test.com', CCAddress='Testcon@gmail.com', FromAddress='test@example.com', Status='3', HtmlBody='Hi Aero Steel,<br/> Member Query: Can You provide the test drove at home location.Please <a href="', RelatedToId=gar.Id);
 		insert EM;
@@ -153,7 +153,7 @@ private class FastPassIntegrationServiceTest {
         insert con;
         Opportunity opp = new opportunity(Name = 'Test Opp ', Vehicle_VIN__C = 'VIN645466', ForecastCategoryName ='Omitted', Card_Number__c = '7878678767877898', 	Probability= 0, CloseDate = Date.newInstance(2024, 08, 12), StageName = 'New',  Auto_Shopper__c = con.Id );
 		insert opp;
-        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323'); 
+        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323',FastPass_Vehicle_Id__c = 123); 
         insert gar;
         
         RestRequest request = new RestRequest();
@@ -253,7 +253,7 @@ private class FastPassIntegrationServiceTest {
         RestRequest request = new RestRequest();
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
-        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleAdditionToGarage", "LoanId" : "7878678767877898", "FastPassDealerId" : "1202434" , "VehicleVIN" : "645466", "VehicleName" : "Thar", "Year": 2014}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleAdditionToGarage", "LoanId" : "7878678767877898", "FastPassDealerId" : "1202434" , "VehicleVIN" : "645466", "VehicleName" : "Thar", "Year": 2014, "fastpassVehicleId": "123"}]');
         RestContext.request = request;
         List<FastPassIntegrationService.CreateResponseWrapper> responseList = FastPassIntegrationService.doPost();
     }
@@ -263,14 +263,14 @@ private class FastPassIntegrationServiceTest {
         RestRequest request = new RestRequest();
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
-        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleAdditionToGarage", "LoanId" : "7878678767877898", "FastPassDealerId" : "1202434" , "VehicleVIN" : "645466", "VehicleName" : "Thar", "Year": 2014}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleAdditionToGarage", "LoanId" : "7878678767877898", "FastPassDealerId" : "1202434" , "VehicleVIN" : "645466", "VehicleName" : "Thar", "Year": 2014, "fastpassVehicleId": "123"}]');
         RestContext.request = request;
         List<FastPassIntegrationService.CreateResponseWrapper> responseList = FastPassIntegrationService.doPost();
         
         RestRequest request1 = new RestRequest();
         request1.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request1.addHeader('Content-Type', 'application/json');
-        request1.requestBody = Blob.valueOf('[{"RequestType" : "vehicleRemovalInGarage", "LoanId" : "7878678767877898", "FastPassDealerId" : "1202434" , "VehicleVIN" : "645466", "VehicleName" : "Thar", "Year": 2014}]');
+        request1.requestBody = Blob.valueOf('[{"RequestType" : "vehicleRemovalInGarage", "LoanId" : "7878678767877898", "FastPassDealerId" : "1202434" , "VehicleVIN" : "645466", "VehicleName" : "Thar", "Year": 2014, "fastpassVehicleId": "123"}]');
         RestContext.request = request1;
         List<FastPassIntegrationService.CreateResponseWrapper> responseList2 = FastPassIntegrationService.doPost();
     }
@@ -283,12 +283,12 @@ private class FastPassIntegrationServiceTest {
         insert con;
         Opportunity opp = new opportunity(Name = 'Test Opp ', Vehicle_VIN__C = 'VIN645466', ForecastCategoryName ='Omitted', Card_Number__c = '7878678767877898', 	Probability= 0, CloseDate = Date.newInstance(2024, 08, 12), StageName = 'New',  Auto_Shopper__c = con.Id );
 		insert opp;
-        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323', Active__c = false); 
+        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323', Active__c = false,FastPass_Vehicle_Id__c = 123); 
         insert gar;
         RestRequest request = new RestRequest();
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
-        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleAdditionToGarage", "LoanId" : "7878678767877898", "FastPassDealerId" : "1202434" , "VehicleVIN" : "VIN645466", "VehicleName" : "Thar", "Year": 2014}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleAdditionToGarage", "LoanId" : "7878678767877898", "FastPassDealerId" : "1202434" , "VehicleVIN" : "VIN645466", "VehicleName" : "Thar", "Year": 2014, "fastpassVehicleId": "123"}]');
         RestContext.request = request;
         List<FastPassIntegrationService.CreateResponseWrapper> responseList = FastPassIntegrationService.doPost();
     }
@@ -300,7 +300,7 @@ private class FastPassIntegrationServiceTest {
         RestRequest request = new RestRequest();
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
-        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleRemovalInGarage", "LoanId" : "78786787678778980" , "VehicleVIN" : "645466"}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleRemovalInGarage", "LoanId" : "78786787678778980" , "VehicleVIN" : "645466", "fastpassVehicleId": "123"}]');
         RestContext.request = request;
         List<FastPassIntegrationService.CreateResponseWrapper> responseList = FastPassIntegrationService.doPost();
     }
@@ -311,7 +311,7 @@ private class FastPassIntegrationServiceTest {
         RestRequest request = new RestRequest();
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
-        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleAdditionToGarage", "LoanId" : null, "FastPassDealerId" : null , "VehicleVIN" : null, "VehicleName" : null, "Year": null}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleAdditionToGarage", "LoanId" : null, "FastPassDealerId" : null , "VehicleVIN" : null, "VehicleName" : null, "Year": null,"fastpassVehicleId": null}]');
         RestContext.request = request;
         List<FastPassIntegrationService.CreateResponseWrapper> responseList = FastPassIntegrationService.doPost();
     }
@@ -322,7 +322,7 @@ private class FastPassIntegrationServiceTest {
         RestRequest request = new RestRequest();
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
-        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleRemovalInGarage", "LoanId" : null, "VehicleVIN" : null}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "vehicleRemovalInGarage", "LoanId" : null, "VehicleVIN" : null, "fastpassVehicleId": null}]');
         RestContext.request = request;
         List<FastPassIntegrationService.CreateResponseWrapper> responseList = FastPassIntegrationService.doPost();
     }
@@ -440,6 +440,7 @@ private class FastPassIntegrationServiceTest {
         gar.Dealer_pro_3__c = contactsToUpdate[4].Id;
         gar.VIN__c = '645466';
         gar.Fastpass_Dealer_Id__c = '202434';
+        gar.FastPass_Vehicle_Id__c = 123;
         gar.Pending_Requests__c = 'Subject++ Test Pending Request Subject Body++ Test Pending Request Body Contains ?q=opportunityId, dealerId ">click here Type++ testDrive;;Subject++ Test Pending Request Subject1 Body++ Test Pending Request Body1 Contains ?q=opportunityId, dealerId ">click here Type++ testDrive';
         gar.Year__c = 2014;
         gar.Opportunity__c = oppList[0].Id;
@@ -535,6 +536,7 @@ private class FastPassIntegrationServiceTest {
         gar.Dealer_Email_Available__c = false;
         gar.VIN__c = '645466';
         gar.Fastpass_Dealer_Id__c = '202434';
+		gar.FastPass_Vehicle_Id__c = 123;
         gar.Pending_Requests__c = 'Subject++ Test Pending Request Subject Body++ Test Pending Request Body Contains ?q=opportunityId, dealerId ">click here Type++ testDrive;;Subject++ Test Pending Request Subject1 Body++ Test Pending Request Body1 Contains ?q=opportunityId, dealerId ">click here Type++ testDrive';
         gar.Year__c = 2014;
        
@@ -625,17 +627,39 @@ private class FastPassIntegrationServiceTest {
         insert con;
         Opportunity opp = new opportunity(Name = 'Test Opp ', Vehicle_VIN__C = 'VIN645466', ForecastCategoryName ='Omitted', Card_Number__c = '7878678767877898', 	Probability= 0, CloseDate = Date.newInstance(2024, 08, 12), StageName = 'New',  Auto_Shopper__c = con.Id );
 		insert opp;
-        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323'); 
+        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323',FastPass_Vehicle_Id__c = 123, Pending_Request_JSON__c ='{"testDrive":[{"VehicleVIN":"VIN75244425","Sender":"Member","MarketCheckId":"1515151514","LoanId":"1234123443214321","EmailMessage":"Can you please provide the test drive at home location 1234","CreatedDate":"2024-10-08T16:32:11.288Z"}]}'); 
         insert gar;
-        EmailMessage EM =  new EmailMessage(Subject='Query requested by Test Member for #7878678767877898 in #VIN645466', ToAddress='testmanager@test.com', CCAddress='Testcon@gmail.com', FromAddress='test@example.com', Status='3', HtmlBody='Hi Aero Steel,<br/> Member Query: Can You provide the test drove at home location.Please <a href="', RelatedToId=gar.Id);
+        EmailMessage EM =  new EmailMessage(Subject='Query requested by Test Member for #7878678767877898 in #VIN645466 #123', ToAddress='testmanager@test.com', CCAddress='Testcon@gmail.com', FromAddress='test@example.com', Status='3', HtmlBody='Hi Aero Steel,<br/> Member Query: Can You provide the test drove at home location.Please <a href="', RelatedToId=gar.Id);
 		insert EM;
+		EmailMessage EM1 =  new EmailMessage(Subject='Query requested by Test Member for #7878678767877898 in #VIN645466 #123', ToAddress='testmanager@test.com', CCAddress='Testcon@gmail.com', FromAddress='test@example.com', Status='3', HtmlBody='Hi Aero Steel,<br/> Dealer Response:: Can You provide the test drove at home location.Please </body>', RelatedToId=gar.Id);
+		insert EM1;
+		EmailMessage EM2 =  new EmailMessage(Subject='Query requested by Test Member for #7878678767877898 in #VIN645466 #123', ToAddress='testmanager@test.com', CCAddress='Testcon@gmail.com', FromAddress='test@example.com', Status='3', HtmlBody='Hi Aero Steel,<br/> Member Response::: Can You provide the test drove at home location.Please <a href="', RelatedToId=gar.Id);
+		insert EM2;
+		EmailMessage EM3 =  new EmailMessage(Subject='Query requested by Test Member for #7878678767877898 in #VIN645466 #123', ToAddress='testmanager@test.com', CCAddress='Testcon@gmail.com', FromAddress='test@example.com', Status='3', HtmlBody='Hi Aero Steel,<br/>  Can You provide the test drove at home location.Vehicle Name: Test<br /> Test Drive Date: Test<br/>', RelatedToId=gar.Id);
+		insert EM3;
         RestRequest request = new RestRequest();
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
         request.httpMethod = 'Post';
-        request.requestBody = Blob.valueOf('[{"RequestType" : "askDealerConversation", "LoanId" : "7878678767877898", "FastPassDealerId" : "2323", "VehicleVIN" : "VIN645466", "PageNumber" : 1}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "askDealerConversation", "LoanId" : "7878678767877898", "FastPassDealerId" : "2323", "VehicleVIN" : "VIN645466", "PageNumber" : 1,"fastpassVehicleId":123}]');
         RestContext.request = request;
-        FastPassIntegrationService.doPost();           
+        FastPassIntegrationService.doPost();   
+		
+		RestRequest request1 = new RestRequest();
+        request1.requestUri = '/services/apexrest/FastPassIntegrationService/';
+        request1.addHeader('Content-Type', 'application/json');
+        request1.httpMethod = 'Post';
+        request1.requestBody = Blob.valueOf('[{"RequestType" : "askDealerConversation", "LoanId" : "78786787678778911", "FastPassDealerId" : "2323", "VehicleVIN" : "VIN645466", "PageNumber" : 1,"fastpassVehicleId":123}]');
+        RestContext.request = request1;
+        FastPassIntegrationService.doPost();  
+		
+		RestRequest request2 = new RestRequest();
+        request2.requestUri = '/services/apexrest/FastPassIntegrationService/';
+        request2.addHeader('Content-Type', 'application/json');
+        request2.httpMethod = 'Post';
+        request2.requestBody = Blob.valueOf('[{"RequestType" : "askDealerConversation", "LoanId" : "7878678767877898", "FastPassDealerId" : "2323", "VehicleVIN" : "VIN645466", "PageNumber" : 1,"fastpassVehicleId":1232}]');
+        RestContext.request = request2;
+        FastPassIntegrationService.doPost();         
     }
     @istest
     static void askDealerRequestResponse(){
@@ -645,7 +669,7 @@ private class FastPassIntegrationServiceTest {
         insert con;
         Opportunity opp = new opportunity(Name = 'Test Opp ', Vehicle_VIN__C = 'VIN645466', ForecastCategoryName ='Omitted', Card_Number__c = '7878678767877898', 	Probability= 0, CloseDate = Date.newInstance(2024, 08, 12), StageName = 'New',  Auto_Shopper__c = con.Id );
 		insert opp;
-        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323'); 
+        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323',FastPass_Vehicle_Id__c = 123); 
         insert gar;
         EmailMessage EM =  new EmailMessage(Subject='Test Drive requested by Test Member for #7878678767877898 in #VIN645466', ToAddress='testmanager@test.com', CCAddress='Testcon@gmail.com', FromAddress='test@example.com', Status='3', HtmlBody='Hi Aero Steel,<br/> Member Query: Can You provide the test drove at home location.Please <a href="', RelatedToId=gar.Id);
 		insert EM;
@@ -653,7 +677,7 @@ private class FastPassIntegrationServiceTest {
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
         request.httpMethod = 'Post';
-        request.requestBody = Blob.valueOf('[{"RequestType" : "testDriveConversation", "LoanId" : "7878678767877898", "FastPassDealerId" : "2323", "VehicleVIN" : "VIN645466", "PageNumber" : 1}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "testDriveConversation", "LoanId" : "7878678767877898", "FastPassDealerId" : "2323", "VehicleVIN" : "VIN645466", "PageNumber" : 1,"FastpassVehicleId":"123"}]');
         RestContext.request = request;
         FastPassIntegrationService.doPost();        
     }
@@ -665,7 +689,7 @@ private class FastPassIntegrationServiceTest {
         insert con;
         Opportunity opp = new opportunity(Name = 'Test Opp ', Vehicle_VIN__C = 'VIN645466', ForecastCategoryName ='Omitted', Card_Number__c = '7878678767877898', 	Probability= 0, CloseDate = Date.newInstance(2024, 08, 12), StageName = 'New',  Auto_Shopper__c = con.Id );
 		insert opp;
-        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323', Pending_Request_JSON__c = '{"askDealer":[{"VehicleVIN":"VIN75244","Sender":"Member","MarketCheckId":"123321","LoanId":"1234123443214321","EmailMessage":"Can you provide the full details of the mentioned vehicle including price, Millage and Vehicle Specifications","CreatedDate":"2024-09-05T04:39:53.311Z"}],"testDrive":[{"VehicleVIN":"VIN75244","Sender":"Member","MarketCheckId":"123321","LoanId":"1234123443214321","EmailMessage":"Can you provide the test drive for BMW M5 on 10th September 2024 at 03:45 AM. Can you please provide the test drive at home location 2","CreatedDate":"2024-09-05T04:44:48.133Z"}]}'); 
+        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323',FastPass_Vehicle_Id__c = 123, Pending_Request_JSON__c = '{"askDealer":[{"VehicleVIN":"VIN75244","Sender":"Member","MarketCheckId":"123321","LoanId":"1234123443214321","EmailMessage":"Can you provide the full details of the mentioned vehicle including price, Millage and Vehicle Specifications","CreatedDate":"2024-09-05T04:39:53.311Z"}],"testDrive":[{"VehicleVIN":"VIN75244","Sender":"Member","MarketCheckId":"123321","LoanId":"1234123443214321","EmailMessage":"Can you provide the test drive for BMW M5 on 10th September 2024 at 03:45 AM. Can you please provide the test drive at home location 2","CreatedDate":"2024-09-05T04:44:48.133Z"}]}'); 
         insert gar;
         //EmailMessage EM =  new EmailMessage(Subject='Test Drive requested by Test Member for #7878678767877898 in #VIN645466', ToAddress='testmanager@test.com', CCAddress='Testcon@gmail.com', FromAddress='test@example.com', Status='3', HtmlBody='Hi Aero Steel,<br/> Member Query: Can You provide the test drove at home location.Please <a href="', RelatedToId=gar.Id);
 		//insert EM;
@@ -673,7 +697,7 @@ private class FastPassIntegrationServiceTest {
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
         request.httpMethod = 'Post';
-        request.requestBody = Blob.valueOf('[{"RequestType" : "testDriveConversation", "LoanId" : "7878678767877898", "FastPassDealerId" : "2323", "VehicleVIN" : "VIN645466", "PageNumber" : 1}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "testDriveConversation", "LoanId" : "7878678767877898", "FastPassDealerId" : "2323", "VehicleVIN" : "VIN645466", "PageNumber" : 1, "FastpassVehicleId":"123"}]');
         RestContext.request = request;
         FastPassIntegrationService.doPost();        
     }
@@ -685,7 +709,7 @@ private class FastPassIntegrationServiceTest {
         insert con;
         Opportunity opp = new opportunity(Name = 'Test Opp ', Vehicle_VIN__C = 'VIN645466', ForecastCategoryName ='Omitted', Card_Number__c = '7878678767877898', 	Probability= 0, CloseDate = Date.newInstance(2024, 08, 12), StageName = 'New',  Auto_Shopper__c = con.Id );
 		insert opp;
-        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id, FastPass_Dealer_Id__c = '2323',Pending_Request_JSON__c = '{"askDealer":[{"VehicleVIN":"VIN75244","Sender":"Member","MarketCheckId":"123321","LoanId":"1234123443214321","EmailMessage":"Can you provide the full details of the mentioned vehicle including price, Millage and Vehicle Specifications","CreatedDate":"2024-09-05T04:39:53.311Z"}],"testDrive":[{"VehicleVIN":"VIN75244","Sender":"Member","MarketCheckId":"123321","LoanId":"1234123443214321","EmailMessage":"Can you provide the test drive for BMW M5 on 10th September 2024 at 03:45 AM. Can you please provide the test drive at home location 2","CreatedDate":"2024-09-05T04:44:48.133Z"}]}'); 
+        Garage__c gar = new Garage__c(VIN__c = 'VIN645466', Name = 'Test Car', Opportunity__c = opp.Id,FastPass_Vehicle_Id__c = 123, FastPass_Dealer_Id__c = '2323',Pending_Request_JSON__c = '{"askDealer":[{"VehicleVIN":"VIN75244","Sender":"Member","MarketCheckId":"123321","LoanId":"1234123443214321","EmailMessage":"Can you provide the full details of the mentioned vehicle including price, Millage and Vehicle Specifications","CreatedDate":"2024-09-05T04:39:53.311Z"}],"testDrive":[{"VehicleVIN":"VIN75244","Sender":"Member","MarketCheckId":"123321","LoanId":"1234123443214321","EmailMessage":"Can you provide the test drive for BMW M5 on 10th September 2024 at 03:45 AM. Can you please provide the test drive at home location 2","CreatedDate":"2024-09-05T04:44:48.133Z"}]}'); 
         insert gar;
        // EmailMessage EM =  new EmailMessage(Subject='Query requested by Test Member for #7878678767877898 in #VIN645466', ToAddress='testmanager@test.com', CCAddress='Testcon@gmail.com', FromAddress='test@example.com', Status='3', HtmlBody='Hi Aero Steel,<br/> Member Query: Can You provide the test drove at home location.Please <a href="', RelatedToId=gar.Id);
 		//insert EM;
@@ -693,7 +717,7 @@ private class FastPassIntegrationServiceTest {
         request.requestUri = '/services/apexrest/FastPassIntegrationService/';
         request.addHeader('Content-Type', 'application/json');
         request.httpMethod = 'Post';
-        request.requestBody = Blob.valueOf('[{"RequestType" : "askDealerConversation", "LoanId" : "7878678767877898", "FastPassDealerId" : "2323", "VehicleVIN" : "VIN645466", "PageNumber" : 1}]');
+        request.requestBody = Blob.valueOf('[{"RequestType" : "askDealerConversation", "LoanId" : "7878678767877898", "FastPassDealerId" : "2323", "VehicleVIN" : "VIN645466", "PageNumber" : 1,"FastpassVehicleId":"123"}]');
         RestContext.request = request;
         FastPassIntegrationService.doPost();           
     }

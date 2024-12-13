@@ -132,7 +132,8 @@ private class AzureIntegrationServiceTest {
                     Brand__c = 'Test Brand',
                     Lead_MSR_Cell_Phone__c = '+11100229988',
                     Project_Manager_Cell_Phone__c = '+12200998877',
-                    F_I_Manager_Cell_Phone__c = '+13399008877'   
+                    F_I_Manager_Cell_Phone__c = '+13399008877',
+					FastPass_Dealer_Id__c ='12'+i   
                 ));
         }
         insert accountsToUpdate;
@@ -205,7 +206,7 @@ private class AzureIntegrationServiceTest {
         insert contactsToUpdate1;
         List<Opportunity> oppList = new List<Opportunity> ();
         for(integer i=0; i<=200; i+=50){
-            oppList.add(new opportunity(Auto_Shopper__c =contactsToUpdate1[i].Id ));
+            //oppList.add(new opportunity(Auto_Shopper__c =contactsToUpdate1[i].Id ));
                 }
         
         List<Contact> contactsToUpdateWithNewPhoneMobile = [SELECT Id, Phone, MobilePhone FROM Contact WHERE Id IN :contactsToUpdate1];
@@ -312,6 +313,191 @@ private class AzureIntegrationServiceTest {
         Test.startTest();
         AvoidUpdates.runOnce();
         Test.stopTest();
+    }
+
+	@isTest
+    static void testCreateLead() {
+        RestRequest request = new RestRequest();
+        request.requestURI = '/AzureIntegrationService/CreateLeadDealerData';
+        request.addHeader('Content-Type', 'application/json');
+        request.requestBody = Blob.valueOf('[{"Company":"TestOpportunity1","FastPass_Dealer_Id__c":"TestBranch1"},'+
+                                           +'{"Company":"TestOpportunity2","FastPass_Dealer_Id__c":"TestBranch2"},'+
+                                           +'{"Company":"TestOpportunity3","FastPass_Dealer_Id__c":"TestBranch3"},'+
+                                           +'{"Company":"TestOpportunity4","FastPass_Dealer_Id__c":"TestBranch4"},'+
+                                           +'{"Company":"","FastPass_Dealer_Id__c":"TestBranch5"}]');
+        
+        RestContext.request = request;
+        
+        // Call the createOpportunities method
+        AzureIntegrationService.CreateResponseWrapper result = AzureIntegrationService.doPost();
+        
+        // Add assertions based on the expected behavior
+        System.assertNotEquals(null, result.success, 'Expected success data');
+        // Add more assertions as needed
+    }
+
+    @isTest
+	static void testUpsertDealer() {
+        Account acc = new Account();
+        acc.Name = 'Test Dealer';
+        acc.fastpass_dealer_id__c = '90907';
+        acc.RecordTypeId = [SELECT Id FROM RecordType WHERE SobjectType = 'Account' AND DeveloperName = 'Auto_Dealer'].Id;
+        insert acc;
+
+        Lead lead = new Lead();
+        lead.LastName = 'Test Lead Dealer';
+        lead.Company = 'Test Dealer';
+        lead.RecordTypeId = [SELECT Id FROM RecordType WHERE SobjectType = 'Lead' AND DeveloperName = 'Dealer'].Id;
+        lead.fastpass_dealer_id__c = '90908';
+        insert lead;
+        
+
+        RestRequest request = new RestRequest();
+        request.requestURI = '/AzureIntegrationService/UpsertDealerData';
+        request.addHeader('Content-Type', 'application/json');
+        request.requestBody = Blob.valueOf(	'['+
+		'{'+
+		'    "Name": "Test Dealer 6",'+
+		'    "Type": "Franchise",'+
+		'    "ParentId": null,'+
+		'    "BillingStreet": null,'+
+		'    "BillingCity": null,'+
+		'    "BillingState": null,'+
+		'    "BillingPostalCode": null,'+
+		'    "BillingCountry": null,'+
+		'    "BillingLatitude": null,'+
+		'    "BillingLongitude": null,'+
+		'    "BillingGeocodeAccuracy": null,'+
+		'    "Phone": "916-555-3344",'+
+		'    "Website": "www.exampledealer6.com",'+
+		'    "NumberOfEmployees": 30,'+
+		'    "Description": "Regional dealer with a strong presence",'+
+		'    "Brand__c": "Ford",'+
+		'    "Market__c": "SoCal",'+
+		'    "Active__c": true,'+
+		'    "F_I_Manager_Name__c": "Jackob 6",'+
+		'    "F_I_Manager_Cell_Phone__c": "9855685405",'+
+		'    "F_I_Email__c": "jackob6@test.com",'+
+		'    "Manager_Name__c": "Sophia",'+
+		'    "Manager_Email__c": null,'+
+		'    "Manager_Cell_Phone__c": null,'+
+		'    "Date_Connected_to_FastPass__c": "2024-07-08",'+
+		'    "FastPass_Dealer_Id__c": "90906",'+
+		'    "Dealer_Id__c": "006",'+
+		'    "Location_Id__c": "006",'+
+		'    "Website_Id__c": "006",'+
+		'    "Rooftop_Id__c": "006",'+
+		'    "Category__c": "Electric Vehicles",'+
+		'    "Dealership_Group_Id__c": "006",'+
+		'    "Dealership_Group_Name__c": "Group 6",'+
+		'    "Sub_Dealership_Group_Id__c": "006",'+
+		'    "Sub_Dealership_Group_Name__c": "Sub Group 6",'+
+		'    "Email__c": "test303@xyz.com",'+
+		'    "Source__c": "EV Push",'+
+		'    "Dealer_Type__c": "Franchise Dealer",'+
+		'    "Franchises__c": "Ford",'+
+		'    "Verified_Dealer_Data__c": true,'+
+		'    "Created_At__c": "2024-08-25T08:45:00.000Z",'+
+		'    "Updated_At__c": "2024-08-25T08:45:00.000Z"'+
+		'},'+
+		'{'+
+		'    "Name": "Test Dealer 7",'+
+		'    "Type": "Franchise",'+
+		'    "ParentId": null,'+
+		'    "BillingStreet": null,'+
+		'    "BillingCity": null,'+
+		'    "BillingState": null,'+
+		'    "BillingPostalCode": null,'+
+		'    "BillingCountry": null,'+
+		'    "BillingLatitude": null,'+
+		'    "BillingLongitude": null,'+
+		'    "BillingGeocodeAccuracy": null,'+
+		'    "Phone": "916-555-3344",'+
+		'    "Website": "www.exampledealer6.com",'+
+		'    "NumberOfEmployees": 30,'+
+		'    "Description": "Regional dealer with a strong presence",'+
+		'    "Brand__c": "Ford",'+
+		'    "Market__c": "SoCal",'+
+		'    "Active__c": true,'+
+		'    "F_I_Manager_Name__c": "Jackob 6",'+
+		'    "F_I_Manager_Cell_Phone__c": "9855685405",'+
+		'    "F_I_Email__c": "jackob6@test.com",'+
+		'    "Manager_Name__c": "Sophia",'+
+		'    "Manager_Email__c": null,'+
+		'    "Manager_Cell_Phone__c": null,'+
+		'    "Date_Connected_to_FastPass__c": "2024-07-08",'+
+		'    "FastPass_Dealer_Id__c": "90907",'+
+		'    "Dealer_Id__c": "006",'+
+		'    "Location_Id__c": "006",'+
+		'    "Website_Id__c": "006",'+
+		'    "Rooftop_Id__c": "006",'+
+		'    "Category__c": "Electric Vehicles",'+
+		'    "Dealership_Group_Id__c": "006",'+
+		'    "Dealership_Group_Name__c": "Group 6",'+
+		'    "Sub_Dealership_Group_Id__c": "006",'+
+		'    "Sub_Dealership_Group_Name__c": "Sub Group 6",'+
+		'    "Email__c": "test303@xyz.com",'+
+		'    "Source__c": "EV Push",'+
+		'    "Dealer_Type__c": "Franchise Dealer",'+
+		'    "Franchises__c": "Ford",'+
+		'    "Verified_Dealer_Data__c": true,'+
+		'    "Created_At__c": "2024-08-25T08:45:00.000Z",'+
+		'    "Updated_At__c": "2024-08-25T08:45:00.000Z"'+
+		'},'+
+        '{'+
+		'    "Name": "Test Dealer 7",'+
+		'    "Type": "Franchise",'+
+		'    "ParentId": null,'+
+		'    "BillingStreet": null,'+
+		'    "BillingCity": null,'+
+		'    "BillingState": null,'+
+		'    "BillingPostalCode": null,'+
+		'    "BillingCountry": null,'+
+		'    "BillingLatitude": null,'+
+		'    "BillingLongitude": null,'+
+		'    "BillingGeocodeAccuracy": null,'+
+		'    "Phone": "916-555-3344",'+
+		'    "Website": "www.exampledealer6.com",'+
+		'    "NumberOfEmployees": 30,'+
+		'    "Description": "Regional dealer with a strong presence",'+
+		'    "Brand__c": "Ford",'+
+		'    "Market__c": "SoCal",'+
+		'    "Active__c": true,'+
+		'    "F_I_Manager_Name__c": "Jackob 6",'+
+		'    "F_I_Manager_Cell_Phone__c": "9855685405",'+
+		'    "F_I_Email__c": "jackob6@test.com",'+
+		'    "Manager_Name__c": "Sophia",'+
+		'    "Manager_Email__c": null,'+
+		'    "Manager_Cell_Phone__c": null,'+
+		'    "Date_Connected_to_FastPass__c": "2024-07-08",'+
+		'    "FastPass_Dealer_Id__c": "90908",'+
+		'    "Dealer_Id__c": "006",'+
+		'    "Location_Id__c": "006",'+
+		'    "Website_Id__c": "006",'+
+		'    "Rooftop_Id__c": "006",'+
+		'    "Category__c": "Electric Vehicles",'+
+		'    "Dealership_Group_Id__c": "006",'+
+		'    "Dealership_Group_Name__c": "Group 6",'+
+		'    "Sub_Dealership_Group_Id__c": "006",'+
+		'    "Sub_Dealership_Group_Name__c": "Sub Group 6",'+
+		'    "Email__c": "test303@xyz.com",'+
+		'    "Source__c": "EV Push",'+
+		'    "Dealer_Type__c": "Franchise Dealer",'+
+		'    "Franchises__c": "Ford",'+
+		'    "Verified_Dealer_Data__c": true,'+
+		'    "Created_At__c": "2024-08-25T08:45:00.000Z",'+
+		'    "Updated_At__c": "2024-08-25T08:45:00.000Z"'+
+		'}'+
+		']');
+        
+        RestContext.request = request;
+        
+        // Call the createOpportunities method
+        AzureIntegrationService.CreateResponseWrapper result = AzureIntegrationService.doPost();
+        
+        // Add assertions based on the expected behavior
+        System.assertNotEquals(null, result.success, 'Expected success data');
+        // Add more assertions as needed
     }
     
 }
