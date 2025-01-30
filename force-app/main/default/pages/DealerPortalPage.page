@@ -598,7 +598,7 @@
         <div class="chat-container">
             <div class="chat-box" id="conversationPanel">
                 <apex:repeat value="{!wrapperList}" var="message">
-                    <div class="chat-message {!IF(CONTAINS(message.textBody, 'Dealer Response:'), 'dealer-message', 'member-message')}">
+                    <div class="chat-message {!IF(isMember, IF(CONTAINS(message.textBody, 'Dealer Response:'), 'member-message', 'dealer-message'), IF(CONTAINS(message.textBody, 'Dealer Response:'), 'dealer-message', 'member-message'))}">
                         <div class="chat-message-sender">{!message.name}</div>
                         <div class="chat-message-body" data-body="{!message.textBody}"></div>
                         <div class="chat-message-time">{!message.createdDate}</div>
@@ -648,7 +648,7 @@
 </div>
 </apex:outputPanel>
             <div id="chatInput" class="chat-input">
-                <apex:inputTextarea id="messageTextarea" value="{!newMessage}" rows="3" cols="50" onkeypress="handleKeyPress();" disabled="{!IF(ISNULL(wrapperList) || wrapperList.size == 0, true, false)}"/>
+                <apex:inputTextarea id="messageTextarea" value="{!newMessage}" rows="3" cols="50" onkeypress="handleKeyPress();" disabled="{!IF((ISNULL(wrapperList) || wrapperList.size == 0) && isMember == false, true, false)}"/>
                 <div class="chat-select-container">
                     <div class="chat-select-label">Send As</div>
                     <apex:selectList value="{!selectedDealer}" size="1" styleClass="chat-select">

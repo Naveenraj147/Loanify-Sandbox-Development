@@ -24,6 +24,12 @@ public class DealerPortalController {
     public String memberName;
     public Integer fastpassDealerId;
     private Date linkSharedDate;
+    public Integer memberMsgCount = 0;
+    public Integer dealerMsgCount = 0;
+    public String contactId;
+    public Boolean isMember{ get; set; }
+
+
     private Map<String,String> dealerNameEmailMap=new Map<String,String>();
     private Map<String,String> emailWithNameMap=new Map<String,String>();
     Opportunity opportunity=new Opportunity();
@@ -69,6 +75,8 @@ public class DealerPortalController {
             type = (String)paramMapping.get('type');
             String dateString = (String)paramMapping.get('linkSharedDate');
             garageId = (String)paramMapping.get('garageId');
+            isMember = (Boolean)paramMapping.get('isMember');
+            isMember = isMember == null? false : isMember ;
             System.debug('dataString--> '+dateString);
             convertedDate = Date.valueOf(dateString);
             System.debug('convertedDate--> '+ convertedDate.daysBetween(System.Today()));
@@ -109,7 +117,7 @@ public class DealerPortalController {
 		List<Contact> dealerPro=new List<Contact>();
         Lead dealerLeadManager;
         Account dealerManager;
-        opportunity = [SELECT Id, Name,Auto_Shopper__r.Name,Card_Number__c, Auto_Shopper__r.Email FROM Opportunity where Id=:opportunityId];
+        opportunity = [SELECT Id, Name,Auto_Shopper__r.Name,Card_Number__c, Auto_Shopper__r.Email, Auto_Shopper__c FROM Opportunity where Id=:opportunityId];
         List<Account> dealerManagerList = [SELECT Id, Name,Manager_Email__c FROM Account WHERE FastPass_Dealer_Id__c = :dealerId Limit 1];
          if(dealerManagerList.size() > 0){
             dealerManager = dealerManagerList[0];
@@ -123,6 +131,7 @@ public class DealerPortalController {
         
         memberName =  opportunity != null? opportunity.Auto_Shopper__r.Name:'Member';
         memberEmail = opportunity != null? opportunity.Auto_Shopper__r.Email:null;
+        contactId = opportunity != null? opportunity.Auto_Shopper__c:null;
         List<User> userList = [SELECT Name, Email FROM User];
         if(userList.size() > 0){
             for(User each : userList){
@@ -171,6 +180,10 @@ public class DealerPortalController {
             requestOptions.add(new SelectOption( 'testDrive', 'Test Drive' ));
             requestOptions.add(new SelectOption( 'askDealer', 'Ask Dealer' ));
         }
+        else if(isMember == true){
+            dealerOptions = new List<SelectOption>();
+            dealerOptions.add(new SelectOption( memberEmail,memberName));
+        }
         else{
             System.debug('Load dealer Options');
             loadDealerOptions(dealerId);
@@ -204,25 +217,17 @@ public class DealerPortalController {
                     duplicateString.add(each.TextBody+each.FromAddress+each.CreatedDate.date());
                     wrapperList.add(wrapper);
                     count++;
+                    if((wrapper.textBody).contains('Dealer Response:')){
+                        dealerMsgCount++;
+                    }
+                    else{
+                        memberMsgCount++;
+                    }
                 }
-                
             }        
-        } else if (type == 'askDealer') {
-            requestHeader = 'Ask Dealer Request';
-            for(EmailMessage each : [SELECT Subject, TextBody, HtmlBody, ToAddress, FromAddress, CreatedDate FROM EmailMessage WHERE Subject LIKE :subject AND RelatedToId = :garageId order by CreatedDate]){
-                EmailWrapper wrapper = new EmailWrapper();
-                wrapper.textBody = each.TextBody;
-                wrapper.createdDate = each.CreatedDate;
-                wrapper.fromAddress = each.FromAddress;
-                wrapper.name = emailWithNameMap.get(each.FromAddress);
-                if(!duplicateString.contains(each.TextBody+each.FromAddress+each.CreatedDate.date())){
-                    duplicateString.add(each.TextBody+each.FromAddress+each.CreatedDate.date());
-                    wrapperList.add(wrapper);
-                    count++;
-                }
-               
-            }
-        }
+            System.debug('memberMsgCount Final:: '+ memberMsgCount);
+            System.debug('dealerMsgCount Final:: '+ dealerMsgCount);
+        } 
         if(count == 1){
             showButtons = true;
         }
@@ -297,6 +302,76 @@ public class DealerPortalController {
 		System.debug('Send Message is Clicked');
         System.debug('Message :: '+ newMessage );
         if (String.isNotBlank(newMessage)) {
+            List<OrgWideEmailAddress> orgWideEmails = [SELECT Id, Address, DisplayName FROM OrgWideEmailAddress where DisplayName = 'Support' Limit 1];
+            OrgWideEmailAddress orgWideEmail = orgWideEmails.size() > 0 ? orgWideEmails[0] : null;
+            if(isMember){
+                List<EmailTemplate> emailTemplates = [SELECT Id, Name, Subject, HtmlValue, DeveloperName 
+                                                    FROM EmailTemplate 
+                                                    WHERE DeveloperName = 'Member_Response_For_Test_Drive_1719904116801'];
+                if(emailTemplates.size() > 0){
+                    EmailTemplate emailTemp = emailTemplates[0];
+                    List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
+                    Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+                    String subject = emailTemp.Subject;
+                    String htmlBody = emailTemp.HtmlValue;
+                    
+                    Map<String, Object> params = new Map<String, Object>();
+                    params.put('opportunityId', opportunity.Id);
+                    params.put('dealerId', dealerMarketcheckId);
+                    params.put('vehicleVin', vehicleVIN);
+                    params.put('vehicleName', vehicleName);
+                    params.put('type', 'testDrive');
+                    params.put('linkSharedDate', Date.today());
+                    params.put('garageId', garage.Id);
+                    params.put('fastpassVehicleId', fastpassVehicleId);
+
+                }
+                
+                String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
+                System.Debug('conLink :: '+conLink);
+                
+                if(htmlBody != null){
+                  //  htmlBody1 = acc <> null? acc.Manager_Name__c <> null? htmlBody1.replace('{{{ManagerName}}}', acc.Manager_Name__c):htmlBody1.replace('{{{ManagerName}}}', acc.Name):htmlBody1.replace('{{{ManagerName}}}','');
+                  //  htmlBody1 = htmlBody1.replace('{{{MemberName}}}', opportunity.Auto_Shopper__r.Name);
+                  //  memberQuery = memberQuery.replaceAll('\n', '<br/>');
+                  //  htmlBody1 = htmlBody1.replace('{{{MemberResponse}}}', memberQuery);
+                    htmlBody1 = htmlBody1.replace ('click here', '<a href="' +conLink+ '">click here</a>');
+                }
+                if(subject != null){
+                  //  subject1 = subject1.replace('Test Drive','Query');
+                  //  subject1 = subject1.replace('{{{Opportunity.Auto_Shopper__c}}}', opportunity.Auto_Shopper__r.Name);
+                  //  subject1 = subject1.replace('{{{VINNumber}}}', +vehicleVIN +' #' + string.valueOf(fastpassVehicleId));
+                  //  subject1 = subject1.replace('{{{Opportunity.Card_Number__c}}}', memberLoanId);
+                }
+                String mailAddress = 'naveen.raj@winfomi.com';
+
+            //String mailAddress = null;
+            if(mailAddress != null && mailAddress != ''){
+                email.setToAddresses(new List<String> { mailAddress });
+                email.setCCAddresses(ccAddress );
+            }else{
+                email.setToAddresses(ccAddress);
+            }
+            email.setOrgWideEmailAddressId(orgWideEmail.Id);
+            string emailType; 
+                emailType = 'Member Response';
+                email.setSubject(subject1);
+                email.setHtmlBody(htmlBody1);
+                email.setSaveAsActivity(true); 
+                email.setWhatId(garage.Id);
+                emailList.add(email);
+
+
+
+
+
+
+
+
+
+
+            }
+            else{
             System.debug('Send Message is Clicked :: '+ newMessage );
             // send email Logic 
             EmailMessage newEmail = new EmailMessage();
@@ -318,25 +393,16 @@ public class DealerPortalController {
                 }
             }
 
-            List<OrgWideEmailAddress> orgWideEmails = [SELECT Id, Address, DisplayName FROM OrgWideEmailAddress where DisplayName = 'Support' Limit 1];
-            OrgWideEmailAddress orgWideEmail = orgWideEmails.size() > 0 ? orgWideEmails[0] : null;
             
-            if(memberEmail != null && orgWideEmail != null){
+            
+            if(memberEmail != null && orgWideEmail != null && ((memberMsgCount == 1 && (dealerMsgCount == null || dealerMsgCount == 0) ) || memberMsgCount > 1)){
 
                 List<EmailTemplate> template = [SELECT Id, DeveloperName FROM EmailTemplate WHERE DeveloperName = 'Email_Notification_to_Member' LIMIT 1];
                 //Messaging.SingleEmailMessage emailTemp = new Messaging.SingleEmailMessage();
-                Messaging.SingleEmailMessage emailTemp = Messaging.renderStoredEmailTemplate(template[0].Id, null, garageId);
+                Messaging.SingleEmailMessage emailTemp;
                 if (template.size() > 0) {
-            // Set up the email message
-            
-
-           // emailTemp.setTemplateId(template[0].Id);
-            //emailTemp.setWhatId(garageId); 
-        } else {
-            System.debug('Email template not found with DeveloperName: Email_Notification_to_Member');
-        }
-        System.debug('Email Subject :: '+ emailTemp.getSubject() );
-        System.debug('Email Body :: '+ emailTemp.getHtmlBody() );
+                emailTemp = Messaging.renderStoredEmailTemplate(template[0].Id, null, garageId);
+                
                 Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
                 // Set the recipient (to address)
                 List<String> toAddresses = new List<String> {memberEmail};
@@ -346,6 +412,11 @@ public class DealerPortalController {
                 email.setOrgWideEmailAddressId(orgWideEmail.Id);
                 // Send the email
                 Messaging.sendEmail(new List<Messaging.SingleEmailMessage> { email });
+                } else {
+                    System.debug('Email template not found with DeveloperName: Email_Notification_to_Member');
+                }
+        
+                
             }
 
             newMessage = '';
@@ -366,32 +437,30 @@ public class DealerPortalController {
                     System.debug('new wrapper :: '+wrapper);
                     
                 }
-                /*for(EmailWrapper each: wrapperList){
-                    System.debug('new wrapper :: '+each);
-                }*/
                 
-            } else if (type == 'askDealer') {
-                garage.Last_Dealer_Response_Ask_Dealer__c = System.now();
-                for (EmailMessage each : [SELECT Subject, TextBody,ToAddress, FromAddress, CreatedDate FROM EmailMessage WHERE Subject LIKE '%Query Requested%' AND Id = :newEmail.Id ]) {
-                    EmailWrapper wrapper = new EmailWrapper();
-                    wrapper.textBody = each.TextBody;
-                    wrapper.createdDate = each.CreatedDate;
-                    wrapper.fromAddress = each.FromAddress;
-                    wrapper.name = emailWithNameMap.get(each.FromAddress);
-                    wrapperList.add(wrapper);
-                    System.debug('wrapper'+wrapper);
-                }
-            }
+            } 
             if(garage.Id != null){
-                System.debug('Inside SMS');
-                Update garage;
-                callFastPassWebhook(chatLink);
-               // SendSMS(garage.Id);
-
+                if(memberMsgCount == 1 &&  dealerMsgCount >= 1){
+                    garage.Send_Generic_Notification__c = true;
+                }
                 
-                tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId('Member_Mobile__c','a0uVA000000aSDtYAM',garage.Id);
+                Update garage;
+                if(chatLink != null){
+                    callFastPassWebhook(chatLink);
+                }
+                if((memberMsgCount == 1 && (dealerMsgCount == null || dealerMsgCount == 0) ) || memberMsgCount > 1){
+                    SendSMS(garage.Id);
+                }
+                
+
+               /* List<tdc_tsw__Message_Template__c> smsTempList = [SELECT Id, Name FROM tdc_tsw__Message_Template__c WHERE Name = 'Notification to the Member'];
+                if(smsTempList.size() > 0){
+                    tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId('Member_Mobile__c',smsTempList[0].Id,garage.Id);
+
+                }*/
                
             }
+        }
         }
     }
     @future(callout=true)
@@ -442,7 +511,7 @@ public class DealerPortalController {
             String accessToken = metaSFAPI != null? metaSFAPI.Access_Token__c: null;
             if(metaSFAPI != null && baseUrl != null && accessToken != null){
               //  String flowUrl = baseUrl+ '/services/data/v53.0/actions/custom/flow/Send_SMS_From_Flow';
-              String flowUrl = baseUrl+ '/services/data/v57.0/sobjects/Garage__c/a1kVA000009I1ZxYAK';
+              String flowUrl = baseUrl+ '/services/data/v57.0/sobjects/Garage__c/'+recordId;
             request.setEndpoint(flowUrl);
             request.setMethod('PATCH');
             
@@ -450,9 +519,7 @@ public class DealerPortalController {
             request.setHeader('Content-Type', 'application/json');
             request.setHeader('Authorization', 'Bearer ' + accessToken);  // If authentication is required
             
-            // Prepare the request body (example JSON payload)
-            Map<String, Object> requestBody = new Map<String, Object>();
-            requestBody.put('Name', 'Garage Test 222');  // Update to the desired stage name
+            
             
             List<tdc_tsw__Message_Template__c> messageTemplate = [SELECT Id FROM tdc_tsw__Message_Template__c Where Name = 'Notification to the Member' Limit 1];
             // Convert to JSON string
@@ -472,7 +539,7 @@ public class DealerPortalController {
                 HttpResponse response = http.send(request);
                 
                 // Process the response
-                if (response.getStatusCode() == 200) {
+                if (response.getStatusCode() == 200 || response.getStatusCode() == 204) {
                     System.debug('Callout successful. Response: ' + response.getBody());
                 } 
                 else {

@@ -181,7 +181,7 @@ public class LeadTriggerHelper {
                     update garageList;
                 }
                 
-              /*  List<String> ConvertedLeadJsonList = new List<String>();
+              List<String> ConvertedLeadJsonList = new List<String>();
                 for(Id each:convertedLeadIds ){
                     Map<String, Object> objMap = new Map<String, Object>();
                     objMap.put('Id', each);
@@ -189,8 +189,10 @@ public class LeadTriggerHelper {
                     ConvertedLeadJsonList.add(JSON.serialize(objMap));
                 }
                 if(ConvertedLeadJsonList.size() > 0){
+                    System.debug('Inside Azure call');
                     AzureIntegrationService.updateDataInAzure(ConvertedLeadJsonList);
-                }*/
+                    System.debug('Inside Azure call was done');
+                }
 
             }
             
@@ -221,9 +223,9 @@ public class LeadTriggerHelper {
         
     }
     
-    
-    public static void sendPendingRequestsToDealer (Set<Id> leadIds, Map<Id, List<String>>  idToEmailMap, Map<Id, List<String>>  idToPhoneMap){
+    public static void sendPendingRequestsToDealer (Set<Id> accIds, Map<Id, List<String>>  idToEmailMap, Map<Id, List<String>>  idToPhoneMap){
         try{
+            System.debug('Inside sendPendingRequestsToDealer3');
             List<OrgWideEmailAddress> orgWideEmails = [SELECT Id, Address, DisplayName FROM OrgWideEmailAddress WHERE DisplayName = 'Support' LIMIT 1];
             OrgWideEmailAddress orgWideEmail = orgWideEmails.size() > 0 ? orgWideEmails[0] : null;
             
@@ -231,95 +233,129 @@ public class LeadTriggerHelper {
                 System.debug('No Org-Wide Email Address found');
                 return;
             }
-            List<Messaging.SingleEmailMessage> emailMessages = new List<Messaging.SingleEmailMessage>();
+
+			List<Messaging.SingleEmailMessage> emailMessages = new List<Messaging.SingleEmailMessage>();
             List<Garage__c> garagesToUpdate = new List<Garage__c>();
-            
-            List<Garage__c> garageList = [SELECT Id, Name, VIN__C, Active__c, Dealer_Email_Available__c, FastPass_Dealer_Id__c, Pending_Requests__c, Dealer__c FROM Garage__C WHERE Lead_Dealer__c IN:leadIds];
+			Map<String, List<FastPassIntegrationService.CreateResponseWrapperSuccessJson>> garageIdJsonMap = new Map<String, List<FastPassIntegrationService.CreateResponseWrapperSuccessJson>>();
+            List<tdc_tsw__Message_Template__c> smsTemplate = [SELECT Id, tdc_tsw__SMSBodyNew__c FROM tdc_tsw__Message_Template__c WHERE Name = 'Right_Swipe_Automation_SMS'];
+            Map<Id, Garage__c> garageMap = new Map<Id, Garage__c>([SELECT Id, Name, VIN__C, Active__c, Dealer_Email_Available__c, FastPass_Dealer_Id__c, Pending_Requests__c,Pending_Request_JSON__c, Lead_Dealer__c, Opportunity__c, Opportunity__r.Name,Lead_Dealer__r.Company, Lead_Dealer__r.Manager_Name__c, FastPass_Vehicle_Id__c FROM Garage__C WHERE Lead_Dealer__c IN:accIds]);
             set<Id> garageSet = new set<Id> ();
             set<Id> updatedGarages = new set<Id>();
-            if(!garageList.isEmpty()){
-                for(Garage__c each:garageList){
+            if(!garageMap.keyset().isEmpty()){
+			
+			    List<EmailTemplate> emailTemplates = [SELECT Id, Name, Subject, HtmlValue, DeveloperName 
+                                                  FROM EmailTemplate 
+                                                  WHERE DeveloperName IN ('Member_Query_For_Test_Drive_1719900621424', 
+                                                                          'Member_Response_For_Test_Drive_1719904116801','Right_Swipe_Automation_Email')];
+            
+                EmailTemplate emailTemp1;
+                EmailTemplate emailTemp2;
+                EmailTemplate emailTemp3;
+                String dealerportalURL = system.label.Dealer_Portal_Page_URL;
+            
+                for (EmailTemplate template : emailTemplates) {
+                    if (template.DeveloperName == 'Member_Query_For_Test_Drive_1719900621424') {
+                        emailTemp1 = template;
+                    } else if (template.DeveloperName == 'Member_Response_For_Test_Drive_1719904116801') {
+                        emailTemp2 = template;
+                    }
+                    else if (template.DeveloperName == 'Right_Swipe_Automation_Email') {
+                        emailTemp3 = template;
+                    }
+                }
+                for(Garage__c each:garageMap.values()){
                     if(each.Dealer_Email_Available__c == false){
                         each.Dealer_Email_Available__c = true;
                         garagesToUpdate.add(each);
                         updatedGarages.add(each.Id); 
                     }
-                    if(each.Pending_Requests__c != null){
-                        garageSet.add(each.Id);
+                    if(each.Pending_Request_JSON__c != null){
+					Map<String, object> dataMap = (Map<String, object>) JSON.deserializeUntyped(each.Pending_Request_JSON__c );
+					if(dataMap.containsKey('testDrive')){
+						String testDriveJson = JSON.serialize(dataMap.get('testDrive'));
+                         List<FastPassIntegrationService.CreateResponseWrapperSuccessJson> conversations = (List<FastPassIntegrationService.CreateResponseWrapperSuccessJson>) JSON.deserialize(testDriveJson, List<FastPassIntegrationService.CreateResponseWrapperSuccessJson>.class);
+							garageIdJsonMap.put(each.Id, conversations);
+						}	
                     }
                 }
+				
+				if(garageIdJsonMap.keyset().size() > 0){
+					for(String eachGarage:garageIdJsonMap.keyset()){
+						List<FastPassIntegrationService.CreateResponseWrapperSuccessJson> dealerJsonList = garageIdJsonMap.get(eachGarage);
+						for(FastPassIntegrationService.CreateResponseWrapperSuccessJson eachItem : dealerJsonList ){
+                            String bodyType = eachItem.EmailType;
+                            String MemberQuery = eachItem.EmailMessage;
+                            String subject = eachItem.Subject;
+                            Garage__c  garage = garageMap.get(eachGarage);
+                            System.debug('garage :: '+garage);
+                            String jsonParams =  ContactTriggerHelper.generateSiteUrl(garage.Opportunity__c, garage.FastPass_Dealer_Id__c, garage.VIN__c, garage.Name, 'testdrive', garage.Id, garage.FastPass_Vehicle_Id__c );
+                            String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
+						
+						
+						String body;
+                       // bodyType = 'First Message';
+						if(bodyType == 'First Message'){
+							body = emailTemp3.HtmlValue;
+							body = body.replace('{firstMessage}', MemberQuery);
+							body = body.replace('{Link}', '<a href="' +conLink+ '">click here</a>');
+
+                            String messageText = smsTemplate.size()>0 ? smsTemplate[0].tdc_tsw__SMSBodyNew__c : null;
+	 
+                            if(idToPhoneMap.containsKey(garage.Lead_Dealer__c) && messageText != null){
+                                messageText = messageText.replace('{firstMessage}', MemberQuery);
+                                messageText = messageText.replace('{Link}', conLink);
+                                for(String sms : idToPhoneMap.get(garage.Lead_Dealer__c) ){
+                                    tdc_tsw.GlobalSMSSender.SendSmsWithPhoneNumberAndMessageText(sms,messageText,garage.Id) ;
+                                }
+                            }
+
+						}
+						else if(bodyType == 'Member Response'){
+							body = emailTemp2.HtmlValue;
+							
+							body = garage.Lead_Dealer__r.Manager_Name__c != null? body.replace('{{{ManagerName}}}', garage.Lead_Dealer__r.Manager_Name__c): body.replace('{{{ManagerName}}}', garage.Lead_Dealer__r.Company);
+							body = body.replace('{{{MemberName}}}', garage.Opportunity__r.Name);
+							memberQuery = memberQuery.replaceAll('\n', '<br/>');
+							body = body.replace('{{{MemberResponse}}}', memberQuery);
+							body = body.replace ('click here', '<a href="' +conLink+ '">click here</a>');
+
+						}
+						else if(bodyType == 'Test Drive'){
+						body = emailTemp1.HtmlValue;
+						String formattedDateTime = memberQuery.substringBetween('Are you available on', '?');
+                        body = garage.Lead_Dealer__r.Manager_Name__c != null? body.replace('{{{ManagerName}}}', garage.Lead_Dealer__r.Manager_Name__c): body.replace('{{{ManagerName}}}', garage.Lead_Dealer__r.Company);
+							body = body.replace('{{{MemberName}}}', garage.Opportunity__r.Name);
+							body = body.replace('{{{VINNumber}}}', garage.VIN__c);
+							body = body.replace('{{{VehicleName}}}', garage.Name);
+							body = body.replace('{{{TestDriveDate}}}', formattedDateTime);
+							body = body.replace ('click here', '<a href="' +conLink+ '">click here</a>');
+							if(memberQuery!=null){
+								memberQuery = memberQuery.replaceAll('\n', '<br/>');
+								body = body.replace('{{{MemberQuery}}}', memberQuery);
+							}else {
+								String toRemove = body.substringBetween(formattedDateTime, 'Please <a href="');
+								if (toRemove != null) {
+									body = body.replace(toRemove, '<br/><br/>');
+								}
+							}
+
+						}
+						List<String> toAddress = idToEmailMap.get(garage.Lead_Dealer__c);
+                        if(toAddress != null && body != null){
+                            emailMessages.add(ContactTriggerHelper.generateEmail(orgWideEmail.Id, toAddress, subject, body, true, garage.Id));
+                        }
+						
+						}
+					}
+				}
                 if (!garagesToUpdate.isEmpty()) {
                     update garagesToUpdate;
                 }
                 
-                system.debug('Garage Ids:: '+updatedGarages);
-                system.debug('Gargeset:: ' +garageSet);
-                if(!garageSet.isEmpty()){
-                    List<Garage__c> garageswithPendingRequests = [SELECT Id, Name, VIN__c, FastPass_Dealer_Id__c, Opportunity__C, Pending_Requests__c, Dealer__c, Dealer__r.Manager_Email__c,Lead_Dealer__c,FastPass_Vehicle_Id__c FROM Garage__c WHERE Id IN:garageSet];
-                    List<tdc_tsw__Message_Template__c> smsTemplate = [SELECT Id, tdc_tsw__SMSBodyNew__c FROM tdc_tsw__Message_Template__c WHERE Name = 'Right_Swipe_Automation_SMS'];
-                    String dealerportalURL = system.label.Dealer_Portal_Page_URL;
-                    for (Garage__c garage : garageswithPendingRequests) {
-                        String pendingRequests = garage.Pending_Requests__c;
-                        if (String.isNotBlank(pendingRequests)) {
-                            List<String> requests = pendingRequests.split(';;');
-                            for (String request : requests) {
-                                if (request.contains('Subject++') && request.contains('Body++') && request.contains('Type++')) {
-                                    String subject = request.substringBetween('Subject++', 'Body++').trim();
-                                    String body = request.substringBetween('Body++', 'Type++').trim();
-                                    String type = request.substringAfter('Type++ ').trim();
-                                    List<String> toAddress = idToEmailMap.get(garage.Lead_Dealer__c);
-                                    if (toAddress != null && !toAddress.isEmpty()) {
-                                        Map<String, Object> params = new Map<String, Object>();
-                                        params.put('opportunityId', garage.Opportunity__c);
-                                        params.put('dealerId', garage.FastPass_Dealer_Id__c);
-                                        params.put('vehicleVin', garage.VIN__c);
-                                        params.put('vehicleName', garage.Name);
-                                        params.put('type', type);
-                                        params.put('linkSharedDate', Date.today());
-                                        params.put('garageId', garage.Id);
-                                        params.put('fastpassVehicleId', garage.FastPass_Vehicle_Id__c);
-                                        
-                                        // Convert to JSON string
-                                        String jsonParams = JSON.serialize(params);
-                                        String encryptedParams = CryptoUtility.encrypt(jsonParams);
-                                        String paramsInChatLink = body.substringBetween('?q=', '">click here');
-                                        body = body.replaceAll(paramsInChatLink, encryptedParams);
-                                        Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
-                                        email.setOrgWideEmailAddressId(orgWideEmail.Id);
-                                        email.setToAddresses(toAddress);
-                                        email.setSubject(subject);
-                                        email.setHtmlBody(body);
-                                        email.setSaveAsActivity(true);
-                                        email.setWhatId(garage.Id);
-                                        emailMessages.add(email);
-                                        if(body.contains('Note: Click on the link to REPLY')){
-                                           body = body.replaceAll('<[^>]*>', '');
-                                           body = body.replaceAll('\n', '');
-                                           body = body.replaceAll('\t', '');
-                                           body = body.substringBefore('Thanks,FastPass');
-                                           
-                                           // String response = body.substringBetween('<a href="', '">Click here to reply');
-                                           // System.debug('response:: '+response);
-                                            String messageText = smsTemplate.size()>0 ? smsTemplate[0].tdc_tsw__SMSBodyNew__c : null;
-                                            
-                                            if(idToPhoneMap.containsKey(garage.Lead_Dealer__c) && messageText != null){
-                                                messageText = messageText.replace('{firstMessage}', body);
-                                                String conLink = dealerportalURL+'?q='+encryptedParams;
-                                                messageText = messageText.replace('{Link}', conLink);
-                                                for(String sms : idToPhoneMap.get(garage.Lead_Dealer__c) ){
-                                                    tdc_tsw.GlobalSMSSender.SendSmsWithPhoneNumberAndMessageText(sms,messageText,garage.Id) ;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    
-                                }
-                            }
-                        }
-                    }
-                    
+                
+                if(!emailMessages.isEmpty()){
                     if (!emailMessages.isEmpty()) {
-                        Messaging.SendEmailResult[] results = Messaging.sendEmail(emailMessages);
+                        List<Messaging.SendEmailResult> results = Messaging.sendEmail(emailMessages); 
                         for (Messaging.SendEmailResult result : results) {
                             if (result.isSuccess()) {
                                 System.debug('Email sent successfully');
@@ -335,6 +371,7 @@ public class LeadTriggerHelper {
             system.debug('Exception occurred: '+errorMessage);
         }
     }
+    
 
     public static void mapLeadsToGarage(List<Lead> newList){
         Map<String, String> fpDealerIdLeadIdMap = new Map<String, String>();

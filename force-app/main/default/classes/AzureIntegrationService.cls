@@ -11,7 +11,7 @@ global without sharing class AzureIntegrationService {
             RestResponse res = RestContext.response;
             action = req.requestURI.substring(req.requestURI.lastIndexOf('/')+1);
             System.debug('Action: '+action);
-            if(action=='CreateMemberData' || action=='CreateDealerProData' || action=='CreateServiceRepData'){
+            if(action=='CreateMemberData' || action=='CreateDealerProData' || action=='CreateServiceRepData' || action=='CreateCarbotsMemberData'){
                 wrapper = createContacts();
             }else if(action=='CreateLoanData'){
                 wrapper = createOpportunities();
@@ -96,12 +96,15 @@ global without sharing class AzureIntegrationService {
         CreateResponseWrapper wrapper = new CreateResponseWrapper();
         // Deserialize the JSON request body into a list of Contact records
         List<Contact> conList = (List<Contact>)JSON.deserialize(req.requestBody.tostring(), List<Contact>.class);
-        String conRecTypeName = action=='CreateMemberData' ? 'Auto_Shopper' : action=='CreateDealerProData' ? 'Auto_Dealer_Pro' : action=='CreateServiceRepData' ? 'Bank_Service_Rep' : null;
+        String conRecTypeName = action=='CreateMemberData' ? 'Auto_Shopper' : action=='CreateDealerProData' ? 'Auto_Dealer_Pro' : action=='CreateServiceRepData' ? 'Bank_Service_Rep' : action=='CreateCarbotsMemberData' ? 'Auto_Shopper_Carbots' : null;
         RecordType conRecType = [SELECT Id, Name, DeveloperName, SobjectType FROM RecordType where SobjectType = 'Contact' and DeveloperName=:conRecTypeName];
         Set<String> emailSet = new Set<String>();
         //assign record type
         for(Contact each : conList){
             System.debug('Con:'+each);
+            if(conRecTypeName == 'Auto_Shopper_Carbots'){
+                each.Source__c = 'Carbots';
+            }
             each.RecordTypeId = conRecType!=null ? conRecType.Id : null;
             if(each.Email!=null)
                 emailSet.add(each.Email);
@@ -823,9 +826,9 @@ body = body.replace('{exceptionMessage}', exceptionMessage);*/
                                     data.put('F_I_Manager_Cell_Phone__c', fIManagerCellPhone);
                                 }   
                             } 
-                           /* if(isConverted == true){
-                                data.put('IsConverted', true);
-                            }*/
+                            // if(isConverted == true){
+                            //     data.put('IsConverted', true);
+                            // }
                             
                             
                             String sObjName = recordId.getSObjectType().getDescribe().getName();
@@ -861,20 +864,21 @@ body = body.replace('{exceptionMessage}', exceptionMessage);*/
                                     }
                                 }
                             }
-                           /* else if (sObjName == 'Lead'){
+                            // else if (sObjName == 'Lead'){
                                 
-                                List<Lead> leadList = [SELECT Id, Company, RecordType.DeveloperName FROM Lead WHERE Id =: sfId LIMIT 1];
-                                if(leadList.size() > 0){
-                                    Lead lead = leadList[0];
-                                    data.put('Name', lead.company);
-                                    if (lead.RecordType.DeveloperName == 'Dealer') {
-                                        endpointUrl = metaDataField.Update_Dealer__c;
-                                    } else if (lead.RecordType.DeveloperName == 'Credit_Union') {
-                                        endpointUrl = metaDataField.Update_Branch__c;
-                                    }
-                                }
-                            }*/
+                            //     List<Lead> leadList = [SELECT Id, Company, RecordType.DeveloperName FROM Lead WHERE Id =: sfId LIMIT 1];
+                            //     if(leadList.size() > 0){
+                            //         Lead lead = leadList[0];
+                            //         data.put('Name', lead.company);
+                            //         if (lead.RecordType.DeveloperName == 'Dealer') {
+                            //             endpointUrl = metaDataField.Update_Dealer__c;
+                            //         } else if (lead.RecordType.DeveloperName == 'Credit_Union') {
+                            //             endpointUrl = metaDataField.Update_Branch__c;
+                            //         }
+                            //     }
+                            // }
                             if (endpointUrl != null) {
+                                System.debug('===> Inside Endpoint URL ');
                                 String requestBody = JSON.serialize(data);
                                 System.debug('Serialized Data::' + requestBody);
                                 
