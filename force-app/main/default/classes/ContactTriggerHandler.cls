@@ -32,7 +32,8 @@ public class ContactTriggerHandler {
     }
     
     public void onAfterInsert(){
-        helper.handlePendingRequestsInGarage(newMap); 
+       // helper.handlePendingRequestsInGarage(newMap); 
+        helper.processPortalMessages(newList);
     }
     
     public void onBeforeUpdate(){
@@ -50,7 +51,8 @@ public class ContactTriggerHandler {
     
     public void onAfterUpdate(){
         
-        helper.handlePendingRequestsInGarage1(oldMap, newMap);
+       // helper.handlePendingRequestsInGarage1(oldMap, newMap);
+        helper.processPMforContactUpdate(newList, oldMap);
         
         System.debug('Insert Contact On After Method');
         List<Contact> conList = [select Id,Name,MobilePhone,Phone,RecordTypeId,RecordType.DeveloperName from Contact where Id in: newList];

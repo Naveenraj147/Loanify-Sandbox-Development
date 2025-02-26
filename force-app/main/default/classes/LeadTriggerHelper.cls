@@ -200,6 +200,7 @@ public class LeadTriggerHelper {
             
             if(!leadIds.isEmpty()){
                 sendPendingRequestsToDealer(leadIds, dealerIdToDealerProsEmailMap, dealerIdToDealerProsPhoneMap);
+                processPMforLeadUpdate(leadIds);
                 System.debug('Pending req method called');
             }
         } catch (Exception e){
@@ -221,6 +222,31 @@ public class LeadTriggerHelper {
         contact.Years_at_Dealership__c = yearsAtDealership;
         return contact;
         
+    }
+
+
+    public static void processPMforLeadUpdate(Set<Id> leadIds){
+        List<Garage__c> garList = [SELECT Id, Dealer_Email_Available__c, Lead_Dealer__c FROM Garage__c WHERE Lead_Dealer__c =: leadIds AND Dealer_Email_Available__c = false];
+        if(garList.size() > 0){
+            List<Garage__c> garListToUpdate = new List<Garage__c>();
+            for(garage__c eachGarage : garList ){
+                Garage__c garage = new Garage__c();
+                garage.Id = eachGarage.Id;
+                garage.Dealer_Email_Available__c = false;    
+                garListToUpdate.add(garage);
+            }
+            if(garListToUpdate.size() > 0){
+                update garListToUpdate;
+            }
+            List<Portal_Message__c> portalMessageList = [SELECT Is_Pending__c FROM Portal_Message__c WHERE Is_Pending__c = true AND Garage__c IN : garListToUpdate ];
+            if(portalMessageList.size() > 0){
+                for(Portal_Message__c eachPM : portalMessageList){
+                    eachPM.Is_Pending__c = false;
+                }
+                update portalMessageList;
+            }
+        }
+
     }
     
     public static void sendPendingRequestsToDealer (Set<Id> accIds, Map<Id, List<String>>  idToEmailMap, Map<Id, List<String>>  idToPhoneMap){
@@ -399,4 +425,165 @@ public class LeadTriggerHelper {
         }
     }
 
+    public static void updateControlNumbers(List<Lead> newLeads, Map<Id, Lead> oldLeads) {
+        
+        List<Lead> leadsToProcess = new List<Lead>();
+        Id creditUnionRecordTypeId = Schema.SObjectType.Lead.getRecordTypeInfosByDeveloperName().get('Credit_Union').getRecordTypeId();
+
+        for (Lead each : newLeads) {
+            // Ensure we only process Leads with the correct record type
+            if (each.RecordTypeId == creditUnionRecordTypeId ) {
+                // Check for Proposal Control Number update
+                if (each.Status == 'Proposal' && each.Status != oldLeads.get(each.Id).Status  && each.Proposal_Control_Number__c == null) {
+                    leadsToProcess.add(each);
+                }
+                // Check for Contract Control Number update
+                if (each.Status == 'Due Diligence - Contract' && each.Status != oldLeads.get(each.Id).Status && each.Contract_Control_Number__c == null) {
+                    leadsToProcess.add(each);
+                }
+            }
+        }
+
+        if (!leadsToProcess.isEmpty()) {
+
+            // Fetch relevant Leads for maximum Proposal/Contract Control Numbers
+            Map<String, String> maxProposalNumbers = new Map<String, String>();
+            Map<String, String> maxContractNumbers = new Map<String, String>();
+
+            List<Lead> existingLeads = [
+                SELECT Credit_Union_Id__c, Proposal_Control_Number__c, Contract_Control_Number__c 
+                FROM Lead 
+                WHERE (Proposal_Control_Number__c != NULL OR Contract_Control_Number__c != NULL)
+                AND RecordTypeId =: creditUnionRecordTypeId ALL ROWS
+            ];
+
+            Lead maxProposalLeadRecord= [
+                SELECT Proposal_Control_Number_Formula__c 
+                FROM Lead 
+                WHERE Proposal_Control_Number_Formula__c  != NULL AND RecordTypeId =: creditUnionRecordTypeId
+                ORDER BY Proposal_Control_Number_Formula__c desc Limit 1 ALL ROWS];
+
+            Lead contractLeadRecord= [
+                SELECT Contract_Control_Number_Formula__c 
+                FROM Lead 
+                WHERE Contract_Control_Number_Formula__c  != NULL AND RecordTypeId =: creditUnionRecordTypeId
+                ORDER BY Contract_Control_Number_Formula__c desc Limit 1 ALL ROWS];
+
+            //get Max prop number
+
+            //get max contact number
+
+            //Initializing the max numbers of field 
+            Integer maxProposalNumber = maxProposalLeadRecord != null ? Integer.valueOf(maxProposalLeadRecord.Proposal_Control_Number_Formula__c) : 0 ;
+            Integer maxContractNumber = contractLeadRecord != null ? Integer.valueOf(contractLeadRecord.Contract_Control_Number_Formula__c) : 0 ;
+            
+            // // Find max values per Credit Union ID
+            // for (Lead each : existingLeads) {
+
+            //     //converting the Control numbers to list format
+            //     List<String> proposalControlNumberList = each.Proposal_Control_Number__c != null ? each.Proposal_Control_Number__c.split('-'): new List<string>();
+            //     List<String> contractControlNumberList = each.Contract_Control_Number__c != null ? each.Contract_Control_Number__c.split('-'): new List<string>();
+
+            //     if ( proposalControlNumberList.size() == 3 ) {
+            //         Integer currentNumber = Integer.valueOf(proposalControlNumberList[2]);
+            //         if (currentNumber > maxProposalNumber) {
+            //             maxProposalNumber = currentNumber;
+            //         }
+
+            //     }else if (proposalControlNumberList.size() == 2){
+            //         Integer currentNumber = Integer.valueOf(proposalControlNumberList[1]);
+            //         if (currentNumber > maxProposalNumber) {
+            //             maxProposalNumber = currentNumber;
+            //         }
+            //     }
+
+            //     if ( contractControlNumberList.size() == 3 ) {
+            //         Integer currentNumber = Integer.valueOf(contractControlNumberList[2]);
+            //         if (currentNumber > maxProposalNumber) {
+            //             maxContractNumber = currentNumber;
+            //         }
+
+            //     }else if (contractControlNumberList.size() == 2){
+            //         Integer currentNumber = Integer.valueOf(contractControlNumberList[1]);
+            //         if (currentNumber > maxProposalNumber) {
+            //             maxContractNumber = currentNumber;
+            //         }
+            //     }
+            // }
+
+            // Assign numbers
+            for (Lead each : leadsToProcess) {
+                    
+                String creditUnionId = (each.Credit_Union_Id__c != null) ? String.valueOf(Math.floor(each.Credit_Union_Id__c)) : '';
+
+                if (each.Status == 'Proposal' && String.isEmpty(each.Proposal_Control_Number__c)) {
+                    maxProposalNumber=maxProposalNumber >= 10 ? maxProposalNumber + 1 : 10;
+                    each.Proposal_Control_Number__c = 'P-' + (String.isEmpty(creditUnionId) ? '' : creditUnionId + '-') + String.valueOf(maxProposalNumber).leftPad(3, '0');               
+                }
+
+                if (each.Status == 'Due Diligence - Contract' && String.isEmpty(each.Contract_Control_Number__c)) {
+                    maxContractNumber=maxContractNumber >= 500 ? maxContractNumber + 1 : 500;
+                    System.debug('max contract :'+ 'C-' + String.valueOf(maxContractNumber).leftPad(4, '0'));
+                    String maxContractValuePrefix='C-' + String.valueOf(maxContractNumber).leftPad(4, '0'); 
+                    System.debug('Final Value: '+ maxContractValuePrefix + each.Proposal_Control_Number__c != null ? '-'+each.Proposal_Control_Number__c: '' );
+                    each.Contract_Control_Number__c = maxContractValuePrefix;
+                    System.debug('each.Contract_Control_Number__c before: '+each.Contract_Control_Number__c);
+                    each.Contract_Control_Number__c += each.Proposal_Control_Number__c != null ? '-'+each.Proposal_Control_Number__c: '' ;
+                    System.debug('each.Contract_Control_Number__c after: '+each.Contract_Control_Number__c);                
+                }
+            } 
+        }
+    }
+
+    public static void updateActualExecutedDemoDate(String operationType,List<Lead> newLeads, Map<Id, Lead> oldLeadMap){
+        
+        for (Lead each : newLeads) {
+
+            Id creditUnionRecordTypeId = Schema.SObjectType.Lead.getRecordTypeInfosByDeveloperName().get('Credit_Union').getRecordTypeId();
+
+            /*// Check if Actual_Executed_Demo_Date__c has never been set before
+            if (each.Actual_Executed_Demo_Date__c == null && each.RecordTypeId == creditUnionRecordTypeId ) {
+                if (operationType == 'Insert'){ 
+                    each.Actual_Executed_Demo_Date__c = each.Planned_Demo_Date__c;
+                }else if ( operationType == 'Update' && oldLeadMap.get(each.Id).Actual_Executed_Demo_Date__c == null && each.Planned_Demo_Date__c != oldLeadMap.get(each.Id).Planned_Demo_Date__c ){
+                    each.Actual_Executed_Demo_Date__c = each.Planned_Demo_Date__c;
+                }
+            }*/
+        }
+    }
+    
+    public static void updateDefaultValues(List<Lead> newLeads, Map<Id, Lead> oldLeadMap){
+        
+        for (Lead each : newLeads) {
+
+            Id creditUnionRecordTypeId = Schema.SObjectType.Lead.getRecordTypeInfosByDeveloperName().get('Credit_Union').getRecordTypeId();
+
+            if (each.RecordTypeId == creditUnionRecordTypeId ) {
+                if(Trigger.isInsert){
+                    each.LinkedIn_Profile__c = (each.LinkedIn_Profile__c==null && each.LinkedIn_Email__c!=null) ? 
+                        each.LinkedIn_Email__c : each.LinkedIn_Profile__c;
+                    each.Interested_Name__c = (each.Interested_Name__c==null && each.Initial_Contact_Name__c!=null) ? 
+                        each.Initial_Contact_Name__c : each.Interested_Name__c;
+                    each.Interested_Email__c = (each.Interested_Email__c==null && each.Direct_Email__c!=null) ? 
+                        each.Direct_Email__c : each.Interested_Email__c;
+                    each.Planned_Demo_Date__c = (each.Planned_Demo_Date__c==null && each.Demo_Date_Planned__c!=null) ? 
+                        each.Demo_Date_Planned__c : each.Planned_Demo_Date__c;
+                    each.Actual_Executed_Demo_Date__c = (each.Actual_Executed_Demo_Date__c==null && each.Planned_Demo_Date__c!=null) ? 
+                        each.Planned_Demo_Date__c : each.Actual_Executed_Demo_Date__c;
+                }else if(Trigger.isUpdate){
+                    each.LinkedIn_Profile__c = (each.LinkedIn_Profile__c==null && each.LinkedIn_Email__c!=null && each.LinkedIn_Email__c != oldLeadMap.get(each.Id).LinkedIn_Email__c) ? 
+                        each.LinkedIn_Email__c : each.LinkedIn_Profile__c;
+                    each.Interested_Name__c = (each.Interested_Name__c==null && each.Initial_Contact_Name__c!=null && each.Initial_Contact_Name__c != oldLeadMap.get(each.Id).Initial_Contact_Name__c) ? 
+                        each.Initial_Contact_Name__c : each.Interested_Name__c;
+                    each.Interested_Email__c = (each.Interested_Email__c==null && each.Direct_Email__c!=null && each.Direct_Email__c != oldLeadMap.get(each.Id).Direct_Email__c) ? 
+                        each.Direct_Email__c : each.Interested_Email__c;
+                    each.Planned_Demo_Date__c = (each.Planned_Demo_Date__c==null && each.Demo_Date_Planned__c!=null && each.Demo_Date_Planned__c != oldLeadMap.get(each.Id).Demo_Date_Planned__c) ? 
+                        each.Demo_Date_Planned__c : each.Planned_Demo_Date__c;
+                    each.Actual_Executed_Demo_Date__c = (each.Actual_Executed_Demo_Date__c==null && each.Planned_Demo_Date__c!=null && each.Planned_Demo_Date__c != oldLeadMap.get(each.Id).Planned_Demo_Date__c) ? 
+                        each.Planned_Demo_Date__c : each.Actual_Executed_Demo_Date__c;
+                }
+            }
+        }
+    }
+    
 }

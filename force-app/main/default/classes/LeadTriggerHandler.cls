@@ -2,7 +2,9 @@ public class LeadTriggerHandler {
     
     // Before Insert Handler
     public static void beforeInsert(List<Lead> newLeads) {
-      
+
+        LeadTriggerHelper.updateActualExecutedDemoDate('Insert',newLeads,null);
+
     }
     
     // Before Update Handler
@@ -23,6 +25,10 @@ public class LeadTriggerHandler {
                 }
             }
         }
+
+        LeadTriggerHelper.updateControlNumbers(newLeads, oldLeadMap);
+        LeadTriggerHelper.updateDefaultValues(newLeads,oldLeadMap);
+
     }
 
     // After Insert Handler

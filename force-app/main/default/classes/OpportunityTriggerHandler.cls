@@ -31,7 +31,7 @@ public class OpportunityTriggerHandler {
     
     
     public void onAfterInsert(){
-        
+        OpportunityTriggerHelper.sendSMSAndEmail(newList, null);
     }
     
     public void onBeforeUpdate(){
@@ -47,6 +47,37 @@ public class OpportunityTriggerHandler {
     }
     
      public void onAfterUpdate(){
+        OpportunityTriggerHelper.sendSMSAndEmail(newList, oldMap);
+        Set<Id> updatedOppIds = new Set<Id>();
+        Set<Id> updatedAccIds = new Set<Id>();
+        Set<Id> accIds = new Set<Id>();
+        for (Opportunity opp : newList) {
+            Opportunity oldOpp = oldMap.get(opp.Id);
+            if (opp.Branch__c != null && opp.Branch__c != oldOpp.Branch__c) {
+                updatedOppIds.add(opp.id);
+                updatedAccIds.add(opp.Branch__c);
+            }
+        }
+    
+        if(updatedAccIds.size() > 0){
+            List<Contact> conList = [SELECT id, AccountId FROM Contact WHERE AccountId in :updatedAccIds];
+            if(conList.size() > 0){
+                for(Contact each : conList){
+                    accIds.add(each.AccountId);
+                }
+            }
+        }
+        if(updatedOppIds.size() > 0){
+            List<Portal_Message__c> pmList = [SELECT id, Opportunity__c, Is_Pending__c, Opportunity__r.Branch__c   FROM Portal_Message__c 
+                                                WHERE Opportunity__c in :updatedOppIds AND Opportunity__r.Branch__c in :accIds AND Portal_Type__c = 'MSR' AND Is_Pending__c = true];
+            if(pmList.size() > 0){
+                for(Portal_Message__c each : pmList){
+                    each.Is_Pending__c = false;
+                }
+                update pmList;
+
+            }
+        }
        
     }
 

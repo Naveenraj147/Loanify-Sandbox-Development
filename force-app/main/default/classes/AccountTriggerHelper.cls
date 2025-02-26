@@ -10,27 +10,26 @@ public class AccountTriggerHelper {
             for(Account each:newMap.Values()){
                 if(each.RecordTypeId == autoDealerRecordTypeId && each.Manager_Email__c != oldMap.get(each.Id).Manager_Email__c && oldMap.get(each.Id).Manager_Email__c == null) {
                     updatedaccountIds.add(each.Id);  
-                     if (!dealerIdToDealerProsEmailMap.containsKey(each.Id)) {
-                        dealerIdToDealerProsEmailMap.put(each.Id, new List<String>());
-                    }
-                    dealerIdToDealerProsEmailMap.get(each.Id).add(each.Manager_Email__c);
                 }   
             }
-            
-            if (updatedaccountIds.isEmpty()) {
-                System.debug('No accounts with updated emails');
-                return;
-            }
-            List<Contact> activeDealerPros = [SELECT Id, Email, AccountId, RecordType.DeveloperName FROM Contact WHERE AccountId IN :updatedAccountIds AND Active__c = true AND RecordType.DeveloperName = 'Auto_Dealer_pro'];
-               for (Contact con : activeDealerPros) {
-                if (!dealerIdToDealerProsEmailMap.containsKey(con.AccountId)) {
-                    dealerIdToDealerProsEmailMap.put(con.AccountId, new List<String>());
+            if(updatedaccountIds.size() > 0){
+                List<Garage__c> garageList = [SELECT Id, Dealer_Email_Available__c FROM Garage__c WHERE Dealer__c =: updatedaccountIds AND Dealer_Email_Available__c = false ];
+                for(Garage__c each:garageList){
+                    each.Dealer_Email_Available__c = true;
                 }
-                dealerIdToDealerProsEmailMap.get(con.AccountId).add(con.Email);
+                if(garageList.size() > 0){
+                    update garageList;
+                }
+                List<Portal_Message__c> pmList = [SELECT id, Is_Pending__c  FROM Portal_Message__c WHERE Garage__r.Dealer__c in :updatedaccountIds AND Portal_Type__c = 'Dealer' AND Is_Pending__c = true];
+                for(Portal_Message__c each:pmList){
+                    each.Is_Pending__c = false;
+                }
+                if(pmList.size() > 0){
+                    update pmList;
+                }
             }
-              ContactTriggerHelper.sendPendingRequestsToDealer(updatedaccountIds, dealerIdToDealerProsEmailMap, null);
-          
-        } catch (Exception e){
+        } 
+        catch (Exception e){
             String errorMessage = e.getTypeName()+': '+e.getMessage()+' Line: '+e.getLineNumber();
             system.debug('Exception occurred: '+errorMessage);
         }

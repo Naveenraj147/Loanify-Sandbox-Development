@@ -74,11 +74,11 @@ global class ReportAPIService {
         String requiredParameter = null; 
         String requiredValues = null;
         CreateResponseWrapper wrapper = new CreateResponseWrapper();
-        if(!requestMap.containsKey('opportunityCreatedFrom') ){
-            requiredParameter = 'opportunityCreatedFrom';
+        if(!requestMap.containsKey('reportStartDate') ){
+            requiredParameter = 'reportStartDate';
         }
-        if(!requestMap.containsKey('opportunityCreatedTill') ){
-            requiredParameter = requiredParameter == null? 'opportunityCreatedTill' : requiredParameter+', '+'opportunityCreatedTill'; 
+        if(!requestMap.containsKey('reportEndDate') ){
+            requiredParameter = requiredParameter == null? 'reportEndDate' : requiredParameter+', '+'reportEndDate'; 
         }
         if(!requestMap.containsKey('creditUnionId') ){
             requiredParameter = requiredParameter == null? 'creditUnionId' : requiredParameter+', '+'creditUnionId'; 
@@ -96,13 +96,13 @@ global class ReportAPIService {
 
            
             String creditUnionId = (String)requestMap.get('creditUnionId');
-            String reportStartDate = (String)requestMap.get('opportunityCreatedFrom');
-            String reportEndDate = (String)requestMap.get('opportunityCreatedTill');
+            String reportStartDate = (String)requestMap.get('reportStartDate');
+            String reportEndDate = (String)requestMap.get('reportEndDate');
             if(reportStartDate == null || reportStartDate =='' ){
-                requiredValues = 'opportunityCreatedFrom';
+                requiredValues = 'reportStartDate';
             }
             if(reportEndDate == null || reportEndDate == '' ){
-                requiredValues = requiredValues == null? 'opportunityCreatedTill' : requiredValues+', '+'opportunityCreatedTill'; 
+                requiredValues = requiredValues == null? 'reportEndDate' : requiredValues+', '+'reportEndDate'; 
             }
             if(creditUnionId == null || creditUnionId == ''){
                 requiredValues = requiredValues == null? 'creditUnionId' : requiredValues+', '+'creditUnionId'; 
@@ -113,12 +113,12 @@ global class ReportAPIService {
                 jsonString = JSON.serialize(wrapper);
             }
             else{
-                Date opportunityCreatedFrom = Date.valueOf((String)requestMap.get('opportunityCreatedFrom'));
-                Date opportunityCreatedTill = Date.valueOf((String)requestMap.get('opportunityCreatedTill'));
+                Date reportStartDate1 = Date.valueOf((String)requestMap.get('reportStartDate'));
+                Date reportEndDate1 = Date.valueOf((String)requestMap.get('reportEndDate'));
                 List<AggregateResult> oppCountByStage = [SELECT StageName, COUNT(Id) countTotal
                                                             FROM Opportunity
-                                                            WHERE CreatedDate >= :opportunityCreatedFrom
-                                                            AND CreatedDate <= :opportunityCreatedTill
+                                                            WHERE CreatedDate >= :reportStartDate1
+                                                            AND CreatedDate <= :reportEndDate1
                                                             AND Lender_Id__c =: creditUnionId
                                                             GROUP BY StageName
                                                             ORDER BY StageName];
