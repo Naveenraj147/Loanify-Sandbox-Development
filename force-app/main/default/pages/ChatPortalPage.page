@@ -396,16 +396,32 @@
             var conversationPanel = document.getElementById('conversationPanel');
             conversationPanel.scrollTop = conversationPanel.scrollHeight;
         }
+        
         // Ensure scrollToBottom is called on initial load
         document.addEventListener("DOMContentLoaded", function() {
+        console.log("Data from LWC ==> ", event.data);
             formatMessages();
             scrollToBottom();
         });
         // Ensure scrollToBottom is called after every AJAX request (such as reRender)
-        document.addEventListener("apexready", function() {
-         //   formatMessages();
-         //   scrollToBottom();
-        }); 
+        var lexOrigin ="https://loanify--dev--c.sandbox.vf.force.com";
+
+        window.addEventListener("message", function(event) {
+
+            console.log("Data from LWC 2 ==> ", event.data);
+            console.log("Data from LWC 2 ==> ", event.origin);
+            
+      
+            // this.callApex(JSON.stringify(event.data));
+
+            if(event.origin !== lexOrigin){
+                //Not the expected origin
+                return;
+            }
+        });
+
+
+
         
         function formatMessages() {
             const messages = document.querySelectorAll('.chat-message-body');
@@ -593,7 +609,7 @@
 </div>
 </apex:outputPanel> 
             <div id="chatInput" class="chat-input">
-                <apex:inputTextarea id="messageTextarea" value="{!newMessage}" rows="3" cols="50" onkeypress="handleKeyPress();" disabled="{!IF((ISNULL(messageList) || messageList.size == 0), true, false)}"/>
+                <apex:inputTextarea id="messageTextarea" value="{!newMessage}" rows="3" cols="50" onkeypress="handleKeyPress();" disabled="{!IF((ISNULL(messageList) || messageList.size == 0) &&  !(portalType == 'MSR' || portalType == 'Advisor'), true, false)}"/>
                 <div class="chat-select-container">
                     <div class="chat-select-label">Send As</div>
                     <apex:selectList value="{!selectedSender}" size="1" styleClass="chat-select">

@@ -1,6 +1,5 @@
 public class LeadTriggerHelper {
     
-    
     public static void processEmailUpdatedLeads (List<Lead> newList, Map<Id, Lead> oldMap){
         try{
             Set<Id> conIds = new Set<Id> ();
@@ -49,9 +48,6 @@ public class LeadTriggerHelper {
                         dealerIdToDealerProsPhoneMap.put(each.Id, phoneList);
 
                     }
-                    System.Debug('Condition ::: '+(each.IsConverted == true )+ (each.IsConverted != oldLead.IsConverted));
-                    System.Debug('old Converted ::: '+ oldLead.IsConverted);
-                    System.Debug('New Converted ::: '+ each.IsConverted);
                     if(each.IsConverted == true && each.IsConverted != oldLead.IsConverted){
                         convertedLeadIds.add(each.Id);
                         
@@ -139,9 +135,6 @@ public class LeadTriggerHelper {
                     }
                     
             }
-            if(newContactsList.size() > 0){
-                insert newContactsList;
-            }
             if(contactIdsToDeleteSet.size() > 0){
                 List<Contact> contactsToDeleteList = [SELECT Id, AccountId FROM Contact WHERE Id =: contactIdsToDeleteSet];
                 Map<String, String> ContactAccountIdMap = new Map<String, String>();
@@ -150,21 +143,22 @@ public class LeadTriggerHelper {
                 }
 
                 List<Task> taskList = [SELECT Id, WhatId, WhoId FROM Task WHERE WhoId IN: contactIdsToDeleteSet];
+
                 if(taskList.size()> 0){
                     List<Task> taskToUpdateList = new List<Task>();
-                for(Task each:taskList){
-                    if(ContactAccountIdMap.containsKey(each.WhoId)){
-                        each.WhatId = ContactAccountIdMap.get(each.WhoId);
-                        each.WhoId = null;
-                        taskToUpdateList.add(each);
+                    for(Task each:taskList){
+                        if(ContactAccountIdMap.containsKey(each.WhoId)){
+                            each.WhatId = ContactAccountIdMap.get(each.WhoId);
+                            each.WhoId = null;
+                            taskToUpdateList.add(each);
+                        }
                     }
-                }
-                if(taskToUpdateList.size()>0){
-                    System.debug('Task Updated');
-                    update taskToUpdateList;
-                }
+                    if(taskToUpdateList.size()>0){
+                        System.debug('Task Updated');
+                        update taskToUpdateList;
+                    }
 
-            }
+                }
                 
                 if(contactsToDeleteList.size() > 0){
                     delete(contactsToDeleteList);
@@ -196,12 +190,11 @@ public class LeadTriggerHelper {
 
             }
             
-            // Adding Account Manager Emails 
-            
-            if(!leadIds.isEmpty()){
-                sendPendingRequestsToDealer(leadIds, dealerIdToDealerProsEmailMap, dealerIdToDealerProsPhoneMap);
-                processPMforLeadUpdate(leadIds);
-                System.debug('Pending req method called');
+            if(!leadIds.isEmpty() ){
+                 processPMforLeadUpdate(leadIds);
+            }
+            if(newContactsList.size() > 0){
+                insert newContactsList;
             }
         } catch (Exception e){
             String errorMessage = e.getTypeName()+': '+e.getMessage()+' Line: '+e.getLineNumber();
@@ -226,178 +219,31 @@ public class LeadTriggerHelper {
 
 
     public static void processPMforLeadUpdate(Set<Id> leadIds){
+	System.debug('Inside process portal messages');
         List<Garage__c> garList = [SELECT Id, Dealer_Email_Available__c, Lead_Dealer__c FROM Garage__c WHERE Lead_Dealer__c =: leadIds AND Dealer_Email_Available__c = false];
         if(garList.size() > 0){
             List<Garage__c> garListToUpdate = new List<Garage__c>();
             for(garage__c eachGarage : garList ){
                 Garage__c garage = new Garage__c();
                 garage.Id = eachGarage.Id;
-                garage.Dealer_Email_Available__c = false;    
+                garage.Dealer_Email_Available__c = true;    
                 garListToUpdate.add(garage);
             }
             if(garListToUpdate.size() > 0){
+				System.debug('Inside garage Update');
                 update garListToUpdate;
             }
             List<Portal_Message__c> portalMessageList = [SELECT Is_Pending__c FROM Portal_Message__c WHERE Is_Pending__c = true AND Garage__c IN : garListToUpdate ];
-            if(portalMessageList.size() > 0){
+            System.debug('portalMessageList ===> '+ portalMessageList);
+			if(portalMessageList.size() > 0){
+                System.debug('Inside Portal Message Update');
                 for(Portal_Message__c eachPM : portalMessageList){
                     eachPM.Is_Pending__c = false;
                 }
                 update portalMessageList;
             }
         }
-
     }
-    
-    public static void sendPendingRequestsToDealer (Set<Id> accIds, Map<Id, List<String>>  idToEmailMap, Map<Id, List<String>>  idToPhoneMap){
-        try{
-            System.debug('Inside sendPendingRequestsToDealer3');
-            List<OrgWideEmailAddress> orgWideEmails = [SELECT Id, Address, DisplayName FROM OrgWideEmailAddress WHERE DisplayName = 'Support' LIMIT 1];
-            OrgWideEmailAddress orgWideEmail = orgWideEmails.size() > 0 ? orgWideEmails[0] : null;
-            
-            if (orgWideEmail == null) {
-                System.debug('No Org-Wide Email Address found');
-                return;
-            }
-
-			List<Messaging.SingleEmailMessage> emailMessages = new List<Messaging.SingleEmailMessage>();
-            List<Garage__c> garagesToUpdate = new List<Garage__c>();
-			Map<String, List<FastPassIntegrationService.CreateResponseWrapperSuccessJson>> garageIdJsonMap = new Map<String, List<FastPassIntegrationService.CreateResponseWrapperSuccessJson>>();
-            List<tdc_tsw__Message_Template__c> smsTemplate = [SELECT Id, tdc_tsw__SMSBodyNew__c FROM tdc_tsw__Message_Template__c WHERE Name = 'Right_Swipe_Automation_SMS'];
-            Map<Id, Garage__c> garageMap = new Map<Id, Garage__c>([SELECT Id, Name, VIN__C, Active__c, Dealer_Email_Available__c, FastPass_Dealer_Id__c, Pending_Requests__c,Pending_Request_JSON__c, Lead_Dealer__c, Opportunity__c, Opportunity__r.Name,Lead_Dealer__r.Company, Lead_Dealer__r.Manager_Name__c, FastPass_Vehicle_Id__c FROM Garage__C WHERE Lead_Dealer__c IN:accIds]);
-            set<Id> garageSet = new set<Id> ();
-            set<Id> updatedGarages = new set<Id>();
-            if(!garageMap.keyset().isEmpty()){
-			
-			    List<EmailTemplate> emailTemplates = [SELECT Id, Name, Subject, HtmlValue, DeveloperName 
-                                                  FROM EmailTemplate 
-                                                  WHERE DeveloperName IN ('Member_Query_For_Test_Drive_1719900621424', 
-                                                                          'Member_Response_For_Test_Drive_1719904116801','Right_Swipe_Automation_Email')];
-            
-                EmailTemplate emailTemp1;
-                EmailTemplate emailTemp2;
-                EmailTemplate emailTemp3;
-                String dealerportalURL = system.label.Dealer_Portal_Page_URL;
-            
-                for (EmailTemplate template : emailTemplates) {
-                    if (template.DeveloperName == 'Member_Query_For_Test_Drive_1719900621424') {
-                        emailTemp1 = template;
-                    } else if (template.DeveloperName == 'Member_Response_For_Test_Drive_1719904116801') {
-                        emailTemp2 = template;
-                    }
-                    else if (template.DeveloperName == 'Right_Swipe_Automation_Email') {
-                        emailTemp3 = template;
-                    }
-                }
-                for(Garage__c each:garageMap.values()){
-                    if(each.Dealer_Email_Available__c == false){
-                        each.Dealer_Email_Available__c = true;
-                        garagesToUpdate.add(each);
-                        updatedGarages.add(each.Id); 
-                    }
-                    if(each.Pending_Request_JSON__c != null){
-					Map<String, object> dataMap = (Map<String, object>) JSON.deserializeUntyped(each.Pending_Request_JSON__c );
-					if(dataMap.containsKey('testDrive')){
-						String testDriveJson = JSON.serialize(dataMap.get('testDrive'));
-                         List<FastPassIntegrationService.CreateResponseWrapperSuccessJson> conversations = (List<FastPassIntegrationService.CreateResponseWrapperSuccessJson>) JSON.deserialize(testDriveJson, List<FastPassIntegrationService.CreateResponseWrapperSuccessJson>.class);
-							garageIdJsonMap.put(each.Id, conversations);
-						}	
-                    }
-                }
-				
-				if(garageIdJsonMap.keyset().size() > 0){
-					for(String eachGarage:garageIdJsonMap.keyset()){
-						List<FastPassIntegrationService.CreateResponseWrapperSuccessJson> dealerJsonList = garageIdJsonMap.get(eachGarage);
-						for(FastPassIntegrationService.CreateResponseWrapperSuccessJson eachItem : dealerJsonList ){
-                            String bodyType = eachItem.EmailType;
-                            String MemberQuery = eachItem.EmailMessage;
-                            String subject = eachItem.Subject;
-                            Garage__c  garage = garageMap.get(eachGarage);
-                            System.debug('garage :: '+garage);
-                            String jsonParams =  ContactTriggerHelper.generateSiteUrl(garage.Opportunity__c, garage.FastPass_Dealer_Id__c, garage.VIN__c, garage.Name, 'testdrive', garage.Id, garage.FastPass_Vehicle_Id__c );
-                            String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
-						
-						
-						String body;
-                       // bodyType = 'First Message';
-						if(bodyType == 'First Message'){
-							body = emailTemp3.HtmlValue;
-							body = body.replace('{firstMessage}', MemberQuery);
-							body = body.replace('{Link}', '<a href="' +conLink+ '">click here</a>');
-
-                            String messageText = smsTemplate.size()>0 ? smsTemplate[0].tdc_tsw__SMSBodyNew__c : null;
-	 
-                            if(idToPhoneMap.containsKey(garage.Lead_Dealer__c) && messageText != null){
-                                messageText = messageText.replace('{firstMessage}', MemberQuery);
-                                messageText = messageText.replace('{Link}', conLink);
-                                for(String sms : idToPhoneMap.get(garage.Lead_Dealer__c) ){
-                                    tdc_tsw.GlobalSMSSender.SendSmsWithPhoneNumberAndMessageText(sms,messageText,garage.Id) ;
-                                }
-                            }
-
-						}
-						else if(bodyType == 'Member Response'){
-							body = emailTemp2.HtmlValue;
-							
-							body = garage.Lead_Dealer__r.Manager_Name__c != null? body.replace('{{{ManagerName}}}', garage.Lead_Dealer__r.Manager_Name__c): body.replace('{{{ManagerName}}}', garage.Lead_Dealer__r.Company);
-							body = body.replace('{{{MemberName}}}', garage.Opportunity__r.Name);
-							memberQuery = memberQuery.replaceAll('\n', '<br/>');
-							body = body.replace('{{{MemberResponse}}}', memberQuery);
-							body = body.replace ('click here', '<a href="' +conLink+ '">click here</a>');
-
-						}
-						else if(bodyType == 'Test Drive'){
-						body = emailTemp1.HtmlValue;
-						String formattedDateTime = memberQuery.substringBetween('Are you available on', '?');
-                        body = garage.Lead_Dealer__r.Manager_Name__c != null? body.replace('{{{ManagerName}}}', garage.Lead_Dealer__r.Manager_Name__c): body.replace('{{{ManagerName}}}', garage.Lead_Dealer__r.Company);
-							body = body.replace('{{{MemberName}}}', garage.Opportunity__r.Name);
-							body = body.replace('{{{VINNumber}}}', garage.VIN__c);
-							body = body.replace('{{{VehicleName}}}', garage.Name);
-							body = body.replace('{{{TestDriveDate}}}', formattedDateTime);
-							body = body.replace ('click here', '<a href="' +conLink+ '">click here</a>');
-							if(memberQuery!=null){
-								memberQuery = memberQuery.replaceAll('\n', '<br/>');
-								body = body.replace('{{{MemberQuery}}}', memberQuery);
-							}else {
-								String toRemove = body.substringBetween(formattedDateTime, 'Please <a href="');
-								if (toRemove != null) {
-									body = body.replace(toRemove, '<br/><br/>');
-								}
-							}
-
-						}
-						List<String> toAddress = idToEmailMap.get(garage.Lead_Dealer__c);
-                        if(toAddress != null && body != null){
-                            emailMessages.add(ContactTriggerHelper.generateEmail(orgWideEmail.Id, toAddress, subject, body, true, garage.Id));
-                        }
-						
-						}
-					}
-				}
-                if (!garagesToUpdate.isEmpty()) {
-                    update garagesToUpdate;
-                }
-                
-                
-                if(!emailMessages.isEmpty()){
-                    if (!emailMessages.isEmpty()) {
-                        List<Messaging.SendEmailResult> results = Messaging.sendEmail(emailMessages); 
-                        for (Messaging.SendEmailResult result : results) {
-                            if (result.isSuccess()) {
-                                System.debug('Email sent successfully');
-                            } else {
-                                System.debug('Failed to send email: ' + result.getErrors()[0].getMessage());
-                            }
-                        }
-                    }
-                }
-            }  
-        } catch (Exception e){
-            String errorMessage = e.getTypeName()+': '+e.getMessage()+' Line: '+e.getLineNumber();
-            system.debug('Exception occurred: '+errorMessage);
-        }
-    }
-    
 
     public static void mapLeadsToGarage(List<Lead> newList){
         Map<String, String> fpDealerIdLeadIdMap = new Map<String, String>();
@@ -426,164 +272,109 @@ public class LeadTriggerHelper {
     }
 
     public static void updateControlNumbers(List<Lead> newLeads, Map<Id, Lead> oldLeads) {
-        
-        List<Lead> leadsToProcess = new List<Lead>();
-        Id creditUnionRecordTypeId = Schema.SObjectType.Lead.getRecordTypeInfosByDeveloperName().get('Credit_Union').getRecordTypeId();
 
-        for (Lead each : newLeads) {
-            // Ensure we only process Leads with the correct record type
-            if (each.RecordTypeId == creditUnionRecordTypeId ) {
-                // Check for Proposal Control Number update
-                if (each.Status == 'Proposal' && each.Status != oldLeads.get(each.Id).Status  && each.Proposal_Control_Number__c == null) {
-                    leadsToProcess.add(each);
-                }
-                // Check for Contract Control Number update
-                if (each.Status == 'Due Diligence - Contract' && each.Status != oldLeads.get(each.Id).Status && each.Contract_Control_Number__c == null) {
-                    leadsToProcess.add(each);
-                }
-            }
-        }
-
-        if (!leadsToProcess.isEmpty()) {
-
-            // Fetch relevant Leads for maximum Proposal/Contract Control Numbers
-            Map<String, String> maxProposalNumbers = new Map<String, String>();
-            Map<String, String> maxContractNumbers = new Map<String, String>();
-
-            List<Lead> existingLeads = [
-                SELECT Credit_Union_Id__c, Proposal_Control_Number__c, Contract_Control_Number__c 
-                FROM Lead 
-                WHERE (Proposal_Control_Number__c != NULL OR Contract_Control_Number__c != NULL)
-                AND RecordTypeId =: creditUnionRecordTypeId ALL ROWS
-            ];
-
-            Lead maxProposalLeadRecord= [
-                SELECT Proposal_Control_Number_Formula__c 
-                FROM Lead 
-                WHERE Proposal_Control_Number_Formula__c  != NULL AND RecordTypeId =: creditUnionRecordTypeId
-                ORDER BY Proposal_Control_Number_Formula__c desc Limit 1 ALL ROWS];
-
-            Lead contractLeadRecord= [
-                SELECT Contract_Control_Number_Formula__c 
-                FROM Lead 
-                WHERE Contract_Control_Number_Formula__c  != NULL AND RecordTypeId =: creditUnionRecordTypeId
-                ORDER BY Contract_Control_Number_Formula__c desc Limit 1 ALL ROWS];
-
-            //get Max prop number
-
-            //get max contact number
-
-            //Initializing the max numbers of field 
-            Integer maxProposalNumber = maxProposalLeadRecord != null ? Integer.valueOf(maxProposalLeadRecord.Proposal_Control_Number_Formula__c) : 0 ;
-            Integer maxContractNumber = contractLeadRecord != null ? Integer.valueOf(contractLeadRecord.Contract_Control_Number_Formula__c) : 0 ;
-            
-            // // Find max values per Credit Union ID
-            // for (Lead each : existingLeads) {
-
-            //     //converting the Control numbers to list format
-            //     List<String> proposalControlNumberList = each.Proposal_Control_Number__c != null ? each.Proposal_Control_Number__c.split('-'): new List<string>();
-            //     List<String> contractControlNumberList = each.Contract_Control_Number__c != null ? each.Contract_Control_Number__c.split('-'): new List<string>();
-
-            //     if ( proposalControlNumberList.size() == 3 ) {
-            //         Integer currentNumber = Integer.valueOf(proposalControlNumberList[2]);
-            //         if (currentNumber > maxProposalNumber) {
-            //             maxProposalNumber = currentNumber;
-            //         }
-
-            //     }else if (proposalControlNumberList.size() == 2){
-            //         Integer currentNumber = Integer.valueOf(proposalControlNumberList[1]);
-            //         if (currentNumber > maxProposalNumber) {
-            //             maxProposalNumber = currentNumber;
-            //         }
-            //     }
-
-            //     if ( contractControlNumberList.size() == 3 ) {
-            //         Integer currentNumber = Integer.valueOf(contractControlNumberList[2]);
-            //         if (currentNumber > maxProposalNumber) {
-            //             maxContractNumber = currentNumber;
-            //         }
-
-            //     }else if (contractControlNumberList.size() == 2){
-            //         Integer currentNumber = Integer.valueOf(contractControlNumberList[1]);
-            //         if (currentNumber > maxProposalNumber) {
-            //             maxContractNumber = currentNumber;
-            //         }
-            //     }
-            // }
-
-            // Assign numbers
-            for (Lead each : leadsToProcess) {
-                    
-                String creditUnionId = (each.Credit_Union_Id__c != null) ? String.valueOf(Math.floor(each.Credit_Union_Id__c)) : '';
-
-                if (each.Status == 'Proposal' && String.isEmpty(each.Proposal_Control_Number__c)) {
-                    maxProposalNumber=maxProposalNumber >= 10 ? maxProposalNumber + 1 : 10;
-                    each.Proposal_Control_Number__c = 'P-' + (String.isEmpty(creditUnionId) ? '' : creditUnionId + '-') + String.valueOf(maxProposalNumber).leftPad(3, '0');               
-                }
-
-                if (each.Status == 'Due Diligence - Contract' && String.isEmpty(each.Contract_Control_Number__c)) {
-                    maxContractNumber=maxContractNumber >= 500 ? maxContractNumber + 1 : 500;
-                    System.debug('max contract :'+ 'C-' + String.valueOf(maxContractNumber).leftPad(4, '0'));
-                    String maxContractValuePrefix='C-' + String.valueOf(maxContractNumber).leftPad(4, '0'); 
-                    System.debug('Final Value: '+ maxContractValuePrefix + each.Proposal_Control_Number__c != null ? '-'+each.Proposal_Control_Number__c: '' );
-                    each.Contract_Control_Number__c = maxContractValuePrefix;
-                    System.debug('each.Contract_Control_Number__c before: '+each.Contract_Control_Number__c);
-                    each.Contract_Control_Number__c += each.Proposal_Control_Number__c != null ? '-'+each.Proposal_Control_Number__c: '' ;
-                    System.debug('each.Contract_Control_Number__c after: '+each.Contract_Control_Number__c);                
-                }
-            } 
-        }
-    }
-
-    public static void updateActualExecutedDemoDate(String operationType,List<Lead> newLeads, Map<Id, Lead> oldLeadMap){
-        
-        for (Lead each : newLeads) {
-
+        try {
+            List<Lead> leadsToProcess = new List<Lead>();
             Id creditUnionRecordTypeId = Schema.SObjectType.Lead.getRecordTypeInfosByDeveloperName().get('Credit_Union').getRecordTypeId();
 
-            /*// Check if Actual_Executed_Demo_Date__c has never been set before
-            if (each.Actual_Executed_Demo_Date__c == null && each.RecordTypeId == creditUnionRecordTypeId ) {
-                if (operationType == 'Insert'){ 
-                    each.Actual_Executed_Demo_Date__c = each.Planned_Demo_Date__c;
-                }else if ( operationType == 'Update' && oldLeadMap.get(each.Id).Actual_Executed_Demo_Date__c == null && each.Planned_Demo_Date__c != oldLeadMap.get(each.Id).Planned_Demo_Date__c ){
-                    each.Actual_Executed_Demo_Date__c = each.Planned_Demo_Date__c;
+            for (Lead each : newLeads) {
+                if (each.RecordTypeId == creditUnionRecordTypeId ) {
+                    if (each.Status == 'Proposal' && each.Status != oldLeads.get(each.Id).Status  && each.Proposal_Control_Number__c == null) {
+                        leadsToProcess.add(each);
+                    }
+                    if (each.Status == 'Due Diligence - Contract' && each.Status != oldLeads.get(each.Id).Status && each.Contract_Control_Number__c == null) {
+                        leadsToProcess.add(each);
+                    }
                 }
-            }*/
+            }
+
+            if (!leadsToProcess.isEmpty()) {
+
+                Map<String, String> maxProposalNumbers ;
+                Map<String, String> maxContractNumbers ;
+
+                List<Lead> existingLeads = [
+                    SELECT Credit_Union_Id__c, Proposal_Control_Number__c, Contract_Control_Number__c 
+                    FROM Lead 
+                    WHERE (Proposal_Control_Number__c != NULL OR Contract_Control_Number__c != NULL)
+                    AND RecordTypeId =: creditUnionRecordTypeId ALL ROWS
+                ];
+
+                List<Lead> maxProposalLeadRecord= [
+                    SELECT Proposal_Control_Number_Formula__c 
+                    FROM Lead 
+                    WHERE Proposal_Control_Number_Formula__c  != NULL AND RecordTypeId =: creditUnionRecordTypeId
+                    ORDER BY Proposal_Control_Number_Formula__c desc Limit 1 ALL ROWS];
+
+                List<Lead> contractLeadRecord= [
+                    SELECT Contract_Control_Number_Formula__c 
+                    FROM Lead 
+                    WHERE Contract_Control_Number_Formula__c  != NULL AND RecordTypeId =: creditUnionRecordTypeId
+                    ORDER BY Contract_Control_Number_Formula__c desc Limit 1 ALL ROWS];
+
+                Integer maxProposalNumber = !maxProposalLeadRecord.isEmpty() ? Integer.valueOf(maxProposalLeadRecord[0].Proposal_Control_Number_Formula__c) : 0 ;
+                Integer maxContractNumber = !contractLeadRecord.isEmpty() ? Integer.valueOf(contractLeadRecord[0].Contract_Control_Number_Formula__c) : 0 ;
+                
+                // Assign numbers
+                for (Lead each : leadsToProcess) {
+                        
+                    String creditUnionId = (each.Credit_Union_Id__c != null) ? String.valueOf(Math.floor(each.Credit_Union_Id__c)) : '';
+
+                    if (each.Status == 'Proposal' && String.isEmpty(each.Proposal_Control_Number__c)) {
+                        maxProposalNumber=maxProposalNumber >= 10 ? maxProposalNumber + 1 : 10;
+                        each.Proposal_Control_Number__c = 'P-' + (String.isEmpty(creditUnionId) ? '' : creditUnionId + '-') + String.valueOf(maxProposalNumber).leftPad(3, '0');               
+                    }
+
+                    if (each.Status == 'Due Diligence - Contract' && String.isEmpty(each.Contract_Control_Number__c)) {
+                        maxContractNumber=maxContractNumber >= 500 ? maxContractNumber + 1 : 500;
+                        String maxContractValuePrefix='C-' + String.valueOf(maxContractNumber).leftPad(4, '0'); 
+                        each.Contract_Control_Number__c = maxContractValuePrefix;
+                        each.Contract_Control_Number__c += each.Proposal_Control_Number__c != null ? '-'+each.Proposal_Control_Number__c: '' ;
+                    }
+                } 
+            }
+        } catch (Exception e){
+            String errorMessage = e.getTypeName()+': '+e.getMessage()+' Line: '+e.getLineNumber();
+            system.debug('Exception occurred: '+errorMessage);
         }
+        
     }
     
     public static void updateDefaultValues(List<Lead> newLeads, Map<Id, Lead> oldLeadMap){
-        
-        for (Lead each : newLeads) {
-
+        try {
             Id creditUnionRecordTypeId = Schema.SObjectType.Lead.getRecordTypeInfosByDeveloperName().get('Credit_Union').getRecordTypeId();
 
-            if (each.RecordTypeId == creditUnionRecordTypeId ) {
-                if(Trigger.isInsert){
-                    each.LinkedIn_Profile__c = (each.LinkedIn_Profile__c==null && each.LinkedIn_Email__c!=null) ? 
-                        each.LinkedIn_Email__c : each.LinkedIn_Profile__c;
-                    each.Interested_Name__c = (each.Interested_Name__c==null && each.Initial_Contact_Name__c!=null) ? 
-                        each.Initial_Contact_Name__c : each.Interested_Name__c;
-                    each.Interested_Email__c = (each.Interested_Email__c==null && each.Direct_Email__c!=null) ? 
-                        each.Direct_Email__c : each.Interested_Email__c;
-                    each.Planned_Demo_Date__c = (each.Planned_Demo_Date__c==null && each.Demo_Date_Planned__c!=null) ? 
-                        each.Demo_Date_Planned__c : each.Planned_Demo_Date__c;
-                    each.Actual_Executed_Demo_Date__c = (each.Actual_Executed_Demo_Date__c==null && each.Planned_Demo_Date__c!=null) ? 
-                        each.Planned_Demo_Date__c : each.Actual_Executed_Demo_Date__c;
-                }else if(Trigger.isUpdate){
-                    each.LinkedIn_Profile__c = (each.LinkedIn_Profile__c==null && each.LinkedIn_Email__c!=null && each.LinkedIn_Email__c != oldLeadMap.get(each.Id).LinkedIn_Email__c) ? 
-                        each.LinkedIn_Email__c : each.LinkedIn_Profile__c;
-                    each.Interested_Name__c = (each.Interested_Name__c==null && each.Initial_Contact_Name__c!=null && each.Initial_Contact_Name__c != oldLeadMap.get(each.Id).Initial_Contact_Name__c) ? 
-                        each.Initial_Contact_Name__c : each.Interested_Name__c;
-                    each.Interested_Email__c = (each.Interested_Email__c==null && each.Direct_Email__c!=null && each.Direct_Email__c != oldLeadMap.get(each.Id).Direct_Email__c) ? 
-                        each.Direct_Email__c : each.Interested_Email__c;
-                    each.Planned_Demo_Date__c = (each.Planned_Demo_Date__c==null && each.Demo_Date_Planned__c!=null && each.Demo_Date_Planned__c != oldLeadMap.get(each.Id).Demo_Date_Planned__c) ? 
-                        each.Demo_Date_Planned__c : each.Planned_Demo_Date__c;
-                    each.Actual_Executed_Demo_Date__c = (each.Actual_Executed_Demo_Date__c==null && each.Planned_Demo_Date__c!=null && each.Planned_Demo_Date__c != oldLeadMap.get(each.Id).Planned_Demo_Date__c) ? 
-                        each.Planned_Demo_Date__c : each.Actual_Executed_Demo_Date__c;
+            for (Lead each : newLeads) {
+
+                if (each.RecordTypeId == creditUnionRecordTypeId ) {
+                    if(Trigger.isInsert){
+                        each.LinkedIn_Profile__c = (each.LinkedIn_Profile__c==null && each.LinkedIn_Email__c!=null) ? 
+                            each.LinkedIn_Email__c : each.LinkedIn_Profile__c;
+                        each.Interested_Name__c = (each.Interested_Name__c==null && each.Initial_Contact_Name__c!=null) ? 
+                            each.Initial_Contact_Name__c : each.Interested_Name__c;
+                        each.Interested_Email__c = (each.Interested_Email__c==null && each.Direct_Email__c!=null) ? 
+                            each.Direct_Email__c : each.Interested_Email__c;
+                        each.Planned_Demo_Date__c = (each.Planned_Demo_Date__c==null && each.Demo_Date_Planned__c!=null) ? 
+                            each.Demo_Date_Planned__c : each.Planned_Demo_Date__c;
+                        each.Actual_Executed_Demo_Date__c = (each.Actual_Executed_Demo_Date__c==null && each.Planned_Demo_Date__c!=null) ? 
+                            each.Planned_Demo_Date__c : each.Actual_Executed_Demo_Date__c;
+                    }else if(Trigger.isUpdate){
+                        each.LinkedIn_Profile__c = (each.LinkedIn_Profile__c==null && each.LinkedIn_Email__c!=null && each.LinkedIn_Email__c != oldLeadMap.get(each.Id).LinkedIn_Email__c) ? 
+                            each.LinkedIn_Email__c : each.LinkedIn_Profile__c;
+                        each.Interested_Name__c = (each.Interested_Name__c==null && each.Initial_Contact_Name__c!=null && each.Initial_Contact_Name__c != oldLeadMap.get(each.Id).Initial_Contact_Name__c) ? 
+                            each.Initial_Contact_Name__c : each.Interested_Name__c;
+                        each.Interested_Email__c = (each.Interested_Email__c==null && each.Direct_Email__c!=null && each.Direct_Email__c != oldLeadMap.get(each.Id).Direct_Email__c) ? 
+                            each.Direct_Email__c : each.Interested_Email__c;
+                        each.Planned_Demo_Date__c = (each.Planned_Demo_Date__c==null && each.Demo_Date_Planned__c!=null && each.Demo_Date_Planned__c != oldLeadMap.get(each.Id).Demo_Date_Planned__c) ? 
+                            each.Demo_Date_Planned__c : each.Planned_Demo_Date__c;
+                        each.Actual_Executed_Demo_Date__c = (each.Actual_Executed_Demo_Date__c==null && each.Planned_Demo_Date__c!=null && each.Planned_Demo_Date__c != oldLeadMap.get(each.Id).Planned_Demo_Date__c) ? 
+                            each.Planned_Demo_Date__c : each.Actual_Executed_Demo_Date__c;
+                    }
                 }
-            }
+            }    
+        } catch (Exception e){
+            String errorMessage = e.getTypeName()+': '+e.getMessage()+' Line: '+e.getLineNumber();
+            system.debug('Exception occurred: '+errorMessage);
         }
     }
-    
 }

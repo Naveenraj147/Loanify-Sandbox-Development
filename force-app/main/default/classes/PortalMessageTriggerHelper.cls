@@ -2,6 +2,7 @@ public class PortalMessageTriggerHelper {
     public static String orgWideEmailId;
 
     public static void updatePortalMessage(List<Portal_Message__c> newList){
+        try {
         System.debug('Inside PortalMessageTriggerHelper updatePortalMessage');
         set <String> pmIds = new set<String>();
         set <String> pmMSRIds = new set<String>();
@@ -208,7 +209,7 @@ public class PortalMessageTriggerHelper {
                         
                         // Convert to JSON string
                         String jsonParams = JSON.serialize(params);
-                        String conLink = dealerportalURL+'/chatPortalPage'+'?view=DealerPortal&q='+CryptoUtility.encrypt(jsonParams);
+                        String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
                 
                         if(protalMessage.Request_Type__c == 'Test_Drive'){
 
@@ -299,6 +300,10 @@ public class PortalMessageTriggerHelper {
                         email.setSubject(subject);
                         email.setHtmlBody(htmlBody);
                         email.setSaveAsActivity(true); 
+                        email.setUseSignature(false);
+                        if(orgWideEmailId != null){
+                            email.setOrgWideEmailAddressId(orgWideEmailId);
+                        }
                         emailList.add(email);
 
                     }
@@ -374,7 +379,7 @@ public class PortalMessageTriggerHelper {
                             params.put('linkSharedDate', Date.today());
                             // Convert to JSON string
                             String jsonParams = JSON.serialize(params);
-                            String conLink = dealerportalURL+'/chatPortalPage'+'?q='+CryptoUtility.encrypt(jsonParams);
+                            String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
 
 
                             String subject = eachTemp.Subject; 
@@ -394,9 +399,14 @@ public class PortalMessageTriggerHelper {
                                 email.setToAddresses(fullEmailList);
 
                             }
+                            subject = subject.contains('{{{Opportunity.Name}}}')? subject.replace('{{{Opportunity.Name}}}', eachPM.Opportunity__r.Name): subject;
                             htmlBody = htmlBody.replace('{{{Opportunity.Auto_Shopper__c}}}',eachPM.Opportunity__r.Auto_Shopper__r.Name);
                             email.setSubject(subject);
                             email.setHtmlBody(htmlBody);
+                            email.setUseSignature(false);
+                            if(orgWideEmailId != null){
+                                email.setOrgWideEmailAddressId(orgWideEmailId);
+                            }
                             emailList.add(email);
                            
                             
@@ -411,16 +421,19 @@ public class PortalMessageTriggerHelper {
         if(pmMSRMessageIds.size() > 0){
             List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
             
-            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Message__c,Opportunity__c, Opportunity__r.Auto_Shopper__c, Opportunity__r.Branch__c, Opportunity__r.Auto_Shopper__r.FirstName, Opportunity__r.Auto_Shopper__r.Email
+            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Opportunity__r.Mobile__c, Opportunity__r.Phone__c, Message__c,Opportunity__c, Opportunity__r.Auto_Shopper__c, Opportunity__r.Branch__c, Opportunity__r.Branch__r.Name, Opportunity__r.Auto_Shopper__r.FirstName, Opportunity__r.Auto_Shopper__r.Name, Opportunity__r.Auto_Shopper__r.Email
                                                 FROM Portal_Message__c
                                                 WHERE Id IN:pmMSRMessageIds];
-            List<EmailTemplate> template = [SELECT Id, DeveloperName FROM EmailTemplate WHERE DeveloperName = 'Member_Notification_for_MSR_Message' LIMIT 1];
+            List<EmailTemplate> template = [SELECT Id, DeveloperName, Subject, HtmlValue FROM EmailTemplate WHERE DeveloperName = 'Member_Notification_for_MSR_Message' LIMIT 1];
             
             if(pmList.size() > 0 && template.size() > 0){
                 for(Portal_Message__c eachPM : pmList){
                     EmailTemplate temp = template[0]; 
                     if(eachPM.Opportunity__r.Auto_Shopper__r.Email != null){
                        emailList.add(createMembernotificationFromMSR(eachPM, temp));
+                    }
+                    if(eachPM.Opportunity__r.Mobile__c != null || eachPM.Opportunity__r.Phone__c != null){
+                        String apiField = eachPM.Opportunity__r.Mobile__c != null? eachPM.Opportunity__r.Mobile__c : eachPM.Opportunity__r.Phone__c;
                     }
                 }
                 if(emailList.size() > 0){
@@ -431,13 +444,13 @@ public class PortalMessageTriggerHelper {
         if(pmCBMessageIds.size() > 0){
             List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
             List<EmailTemplate> template = [SELECT Id, DeveloperName FROM EmailTemplate WHERE DeveloperName = 'Email_Notification_to_Member' LIMIT 1];
-            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Message__c,Opportunity__c, Opportunity__r.Auto_Shopper__c, Garage__c, Opportunity__r.Auto_Shopper__r.Name, Garage__r.Send_Generic_Notification__c, Opportunity__r.Auto_Shopper__r.Email
+            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Message__c,Opportunity__c, Opportunity__r.Auto_Shopper__c, Garage__c, Opportunity__r.Auto_Shopper__r.Name, Garage__r.Send_Generic_Notification__c, Garage__r.Top_5_List__c, Opportunity__r.Auto_Shopper__r.Email
                                                 FROM Portal_Message__c
                                                 WHERE Id IN:pmCBMessageIds];
             EmailTemplate emailTemp = template.size() > 0? template[0] : null; 
                 if(pmList.size() > 0 && emailTemp != null){
                     for(Portal_Message__c eachPM : pmList){
-                        if(eachPM.Opportunity__r.Auto_Shopper__r.Email != null && eachPM.Garage__r.Send_Generic_Notification__c != true){
+                        if(eachPM.Opportunity__r.Auto_Shopper__r.Email != null && eachPM.Garage__r.Send_Generic_Notification__c != true && eachPM.Garage__r.Top_5_List__c == true){
                             Messaging.SingleEmailMessage emailTempRender = Messaging.renderStoredEmailTemplate(emailTemp.Id, null, eachPM.Garage__c);
                             Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
                             String subject = emailTempRender.getSubject(); 
@@ -450,13 +463,16 @@ public class PortalMessageTriggerHelper {
                     }
                 }
         }
+    } catch (Exception e) {
+            system.debug('Error: ' + e.getMessage());
+    }
     }
 
     public static Messaging.SingleEmailMessage createMembernotificationFromMSR(Portal_Message__c portaMessage, EmailTemplate template){
         String subject = template.Subject; 
         String htmlBody = template.HtmlValue;
-        subject = subject.replace('{{{CreditUnionName}}}', portaMessage.Opportunity__r.Branch__c);
-        subject = subject.replace('{{{Member_FirstName}}}', portaMessage.Opportunity__r.Auto_Shopper__r.FirstName);
+        htmlBody = portaMessage.Opportunity__r.Branch__c !=null?  htmlBody.replace('{{{CreditUnionName}}}', portaMessage.Opportunity__r.Branch__r.Name): htmlBody.replace('{{{CreditUnionName}}}','' );
+        htmlBody = portaMessage.Opportunity__r.Auto_Shopper__r.FirstName != null? htmlBody.replace('{{{Member_FirstName}}}', portaMessage.Opportunity__r.Auto_Shopper__r.FirstName) : htmlBody.replace('{{{Member_FirstName}}}', portaMessage.Opportunity__r.Auto_Shopper__r.Name);
         return createEmail(subject,  htmlBody, new List<String>{portaMessage.Opportunity__r.Auto_Shopper__r.Email},null, portaMessage.Opportunity__c );
     }
 
@@ -467,10 +483,11 @@ public class PortalMessageTriggerHelper {
         email.setToAddresses(toaddress);
         email.setSaveAsActivity(true);
         email.setWhatId(relatedRecordId);
+        email.setUseSignature(false);
         if(orgWideEmailId != null){
             email.setOrgWideEmailAddressId(orgWideEmailId);
         }
-        if(ccaddress.size()>0){
+        if(ccaddress != null && ccaddress.size()>0){
             email.setCcAddresses(ccaddress);
         }
        

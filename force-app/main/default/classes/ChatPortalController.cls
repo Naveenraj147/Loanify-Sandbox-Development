@@ -1,4 +1,4 @@
-public class ChatPortalController {
+global class ChatPortalController {
     public String newMessage { get; set; }
     public String selectedSender { get; set; }
     public List<SelectOption> senderOptions { get; set; }
@@ -24,16 +24,23 @@ public class ChatPortalController {
     public Integer memberMsgCount = 0;
 
     public ChatPortalController() {
+        try {
         newMessage='';
-        opportunityId='';
-        portalType='';
+        opportunityId= opportunityId !=null? opportunityId : '';
+        portalType= portalType!= null ? portalType:'';
 
         // Decrypt and assign the parameters from the URL
         Map<String, String> params = ApexPages.currentPage().getParameters();
-        recordId = params.get('id'); 
+        recordId = recordId!= null ? recordId:params.get('id'); 
         System.debug('RecordId:'+recordId);
         String encryptedParams = params.get('q');
+        portalType = params.get('portalType');
         Date linkGeneratedDate;
+        if(Test.isRunningTest()){
+            opportunityId =  params.get('opportunityId'); 
+            dealerId =  params.get('dealerId');
+        }
+        
        
         if(encryptedParams != null){
             String decryptedParams = CryptoUtility.decrypt(encryptedParams);
@@ -42,6 +49,10 @@ public class ChatPortalController {
             String dateString = (String)paramMapping.get('linkSharedDate');
             linkGeneratedDate = Date.valueOf(dateString);
             portalType = (String)paramMapping.get('portalType');
+            String type = (String)paramMapping.get('type');
+            if(type != null && type == 'testDrive'){
+                portalType = 'Dealer';
+            }
             if(portalType == 'Dealer' || portalType == 'Carbots'){
                 dealerId = (String)paramMapping.get('dealerId');
                 vehicleVin = (String)paramMapping.get('vehicleVin');
@@ -59,13 +70,14 @@ public class ChatPortalController {
             showComponent = true;
             if(sObjName == 'Opportunity'){
                 opportunityId = recordId;
-                portalType = 'MSR';
+                portalType = portalType != null? portalType :'MSR';
             }
             if(sObjName == 'Garage__c'){
                 garageId = recordId;
                 portalType = 'Dealer';
-                List<Garage__c> Garage = [SELECT Id, Opportunity__c FROM Garage__c WHERE Id =:garageId LIMIT 1 ]; 
+                List<Garage__c> Garage = [SELECT Id, Opportunity__c, Fastpass_Dealer_Id__c FROM Garage__c WHERE Id =:garageId LIMIT 1 ]; 
                 opportunityId = Garage.size() > 0? Garage[0].Opportunity__c : null;
+                dealerId = Garage.size() > 0? Garage[0].Fastpass_Dealer_Id__c : null;
 
             }
         }
@@ -73,33 +85,47 @@ public class ChatPortalController {
             showComponent = false;
             ApexPages.addmessage(new ApexPages.message(ApexPages.severity.WARNING,'Link Expired'));
         }
+        if(opportunityId != null && opportunityId != ''){
+            opportunity = [SELECT Id, Name, Auto_Shopper__r.Name, Auto_Shopper__r.Email, Branch__c, Bank_Service_Rep_Name_MSR__c, Branch__r.ParentId, Auto_Shopper__r.RecordTypeId FROM Opportunity where Id=:opportunityId];
+            memberName =  opportunity != null? opportunity.Auto_Shopper__r.Name:'Member';
+            memberEmail = opportunity != null? opportunity.Auto_Shopper__r.Email:null;
+            loadsenderOptions();
+            loadConversations();
+        }
+        else{
+            ApexPages.addmessage(new ApexPages.message(ApexPages.severity.WARNING,'Please Contact Your Admin.'));
+        }
         
-        opportunity = [SELECT Id, Name, Auto_Shopper__r.Name, Auto_Shopper__r.Email, Branch__c, Bank_Service_Rep_Name_MSR__c FROM Opportunity where Id=:opportunityId];
-        memberName =  opportunity != null? opportunity.Auto_Shopper__r.Name:'Member';
-        memberEmail = opportunity != null? opportunity.Auto_Shopper__r.Email:null;
-        loadsenderOptions();
-        loadConversations();
+        } 
+        catch (Exception e) {
+            showComponent = false;
+            System.debug('Error ==> ' + e.getMessage() + 'Line ==>' +e.getLineNumber()) ;
+            ApexPages.addmessage(new ApexPages.message(ApexPages.severity.WARNING,'Please Contact Your Admin.'));  
+        }
     }
+    
+
+    
 
     private void loadConversations() {
         messageList = new List<MessageWrapper>();
         Integer count = 0;
         if (portalType == 'MSR') {
-            for(Portal_Message__c each : [SELECT Message__c,  Sender_Email__c, CreatedDate, Is_Member_Message__c FROM Portal_Message__c WHERE Opportunity__c = :opportunity.Id  AND Garage__c = null AND Portal_Type__c = 'MSR' AND Is_Pending__c = false  order by CreatedDate]){ //
+            for(Portal_Message__c each : [SELECT Message__c,  Sender_Email__c, CreatedDate, Is_Member_Message__c, Message_Sent_Date_Time__c FROM Portal_Message__c WHERE Opportunity__c = :opportunity.Id  AND Garage__c = null AND Portal_Type__c = 'MSR' AND Is_Pending__c = false  order by Message_Sent_Date_Time__c]){ //
                 MessageWrapper wrapper = new MessageWrapper();
                 wrapper.message = each.Message__c;
-                wrapper.createdDate = each.CreatedDate;
+                wrapper.createdDate = each.Message_Sent_Date_Time__c;
                 wrapper.fromAddress = each.Is_Member_Message__c? memberEmail: each.Sender_Email__c;
                 wrapper.styleClass = each.Is_Member_Message__c? 'member-message': 'non-member-message';
                 wrapper.name = each.Is_Member_Message__c? memberName : emailNameMap.get(wrapper.fromAddress);
                 messageList.add(wrapper);
             }
         } 
-        if (portalType == 'Dealer' || portalType == 'Carbots' ) {
-            for(Portal_Message__c each : [SELECT Message__c,  Sender_Email__c, CreatedDate, Is_Member_Message__c FROM Portal_Message__c WHERE Opportunity__c = :opportunity.Id  AND Garage__c = :garageId AND Is_Pending__c = false AND (Portal_Type__c = 'Dealer'OR Portal_Type__c = 'Carbots')  order by CreatedDate]){
+        else if (portalType == 'Dealer' || portalType == 'Carbots' ) {
+            for(Portal_Message__c each : [SELECT Message__c,  Sender_Email__c, CreatedDate, Is_Member_Message__c, Message_Sent_Date_Time__c FROM Portal_Message__c WHERE Opportunity__c = :opportunity.Id  AND Garage__c = :garageId AND Is_Pending__c = false AND (Portal_Type__c = 'Dealer'OR Portal_Type__c = 'Carbots')  order by Message_Sent_Date_Time__c]){
                 MessageWrapper wrapper = new MessageWrapper();
                 wrapper.message = each.Message__c;
-                wrapper.createdDate = each.CreatedDate;
+                wrapper.createdDate = each.Message_Sent_Date_Time__c;
                 wrapper.fromAddress = each.Is_Member_Message__c? memberEmail: each.Sender_Email__c;
                 wrapper.styleClass = each.Is_Member_Message__c? 'member-message': 'non-member-message';
                 wrapper.name = each.Is_Member_Message__c? memberName : emailNameMap.get(wrapper.fromAddress); 
@@ -119,6 +145,18 @@ public class ChatPortalController {
                 showButtons = false;
             }
         }
+        else if(portalType == 'Advisor'){
+            System.debug(' Inside Advisor conversions ==> ');
+            for(Portal_Message__c each : [SELECT Message__c,  Sender_Email__c, CreatedDate, Is_Member_Message__c, Message_Sent_Date_Time__c FROM Portal_Message__c WHERE Opportunity__c = :opportunity.Id  AND Garage__c = null AND Portal_Type__c = 'Advisor' order by Message_Sent_Date_Time__c]){ //
+                MessageWrapper wrapper = new MessageWrapper();
+                wrapper.message = each.Message__c;
+                wrapper.createdDate = each.Message_Sent_Date_Time__c;
+                wrapper.fromAddress = each.Is_Member_Message__c? memberEmail: each.Sender_Email__c;
+                wrapper.styleClass = each.Is_Member_Message__c? 'member-message': 'non-member-message';
+                wrapper.name = each.Is_Member_Message__c? memberName : emailNameMap.get(wrapper.fromAddress);
+                messageList.add(wrapper);
+            }
+        }
     }
     private void loadsenderOptions() {
        
@@ -136,16 +174,73 @@ public class ChatPortalController {
                     emailNameMap.put(each.Email, each.Name);
                 }
             }
+            if(sObjName == 'Garage__c'){
+                Account dealerAccount;
+                Lead dealerLead;
+                List<Account> dealerList = [SELECT Id, Name,Manager_Email__c, Manager_Name__c FROM Account WHERE FastPass_Dealer_Id__c = :dealerId Limit 1];
+                if(dealerList.size() > 0 ){
+                    System.debug('Inside dealerList');
+                    dealerAccount = dealerList[0];
+                    if (dealerAccount.Manager_Name__c !=null && dealerAccount.Manager_Email__c != null) {
+                        nameEmailMap.put(dealerAccount.Id,dealerAccount.Manager_Email__c);
+                        nameEmailMap.put(dealerAccount.Manager_Email__c,dealerAccount.Manager_Name__c);
+                        emailNameMap.put(dealerAccount.Manager_Email__c,dealerAccount.Manager_Name__c);
+                    }
+                    List<Contact> dealerProList = [SELECT Id, Name, Email FROM Contact WHERE AccountId =: dealerAccount.Id];
+                    System.debug('Inside dealerList');
+                    if(dealerProList.size() > 0){
+                        for(Contact each : dealerProList){
+                            if(each.Name != null && each.Email != null){
+                                nameEmailMap.put(each.Id, each.Name);
+                                nameEmailMap.put(each.Name, each.Email);
+                                emailNameMap.put(each.Email, each.Name);
+                            }
+                        }
+                    } 
+                }
+                else{
+                    dealerLead = [SELECT Id, Company, Manager_Email__c, Manager_Name__c, Dealer_Pro_1_Email__c, Dealer_Pro_2_Email__c, Dealer_Pro_3_Email__c, Dealer_Pro_1_Name__c, Dealer_Pro_2_Name__c, Dealer_Pro_3_Name__c FROM Lead WHERE FastPass_Dealer_Id__c = :dealerId Limit 1];
+                    if( dealerLead != null){
+                        System.debug('Inside Dealer Lead Manager');
+                        if(dealerLead.Manager_Email__c != null && dealerLead.Manager_Name__c != null ){
+                            nameEmailMap.put(dealerLead.Manager_Name__c, dealerLead.Manager_Email__c);
+                            emailNameMap.put(dealerLead.Manager_Email__c, dealerLead.Manager_Name__c);
+                        } 
+                        if(dealerLead.Dealer_Pro_1_Email__c != null && dealerLead.Dealer_Pro_1_Name__c != null ){
+                            nameEmailMap.put(dealerLead.Dealer_Pro_1_Name__c, dealerLead.Dealer_Pro_1_Email__c);
+                            emailNameMap.put(dealerLead.Dealer_Pro_1_Email__c, dealerLead.Dealer_Pro_1_Name__c);
+                        } 
+                        if(dealerLead.Dealer_Pro_2_Email__c != null && dealerLead.Dealer_Pro_2_Name__c != null ){
+                            nameEmailMap.put(dealerLead.Dealer_Pro_2_Name__c, dealerLead.Dealer_Pro_2_Email__c);
+                            emailNameMap.put(dealerLead.Dealer_Pro_2_Email__c, dealerLead.Dealer_Pro_2_Name__c);
+                        } 
+                        if(dealerLead.Dealer_Pro_3_Email__c != null && dealerLead.Dealer_Pro_3_Name__c != null ){
+                            nameEmailMap.put(dealerLead.Dealer_Pro_3_Name__c, dealerLead.Dealer_Pro_3_Email__c);
+                            emailNameMap.put(dealerLead.Dealer_Pro_3_Email__c, dealerLead.Dealer_Pro_3_Name__c);
+                        }
+                        System.debug('Inside Dealer Lead Manager'); 
+                    }
+                }
+            }
             
         }
         else if (portalType == 'MSR' ) {
-            List<Contact> msrContacts = [SELECT Id, Name, Email FROM Contact WHERE AccountId =: opportunity.Branch__c];
-
-            for(Contact each : msrContacts) {
-                senderOptions.add(new SelectOption(each.Id, each.Name));
-                nameEmailMap.put(each.Id, each.Email);
-                nameEmailMap.put(each.Email, each.Name);
-                emailNameMap.put(each.Email, each.Name);
+            if(opportunity.Bank_Service_Rep_Name_MSR__c != null){
+                List<Contact> msrContacts = [SELECT Id, Name, Email FROM Contact WHERE Id =: opportunity.Bank_Service_Rep_Name_MSR__c];
+                for(Contact each : msrContacts) {
+                    senderOptions.add(new SelectOption(each.Email, each.Name));
+                    nameEmailMap.put(each.Id, each.Email);
+                    nameEmailMap.put(each.Email, each.Name);
+                    emailNameMap.put(each.Email, each.Name);
+                }
+            }
+            else if(opportunity.Branch__c != null && opportunity.Branch__r.ParentId != null){
+                for(Contact each : [SELECT Id, Name, Email FROM Contact WHERE AccountId =: opportunity.Branch__r.ParentId AND Primary_Contact__c = true]) {
+                    senderOptions.add(new SelectOption(each.Email, each.Name));
+                    nameEmailMap.put(each.Id, each.Email);
+                    nameEmailMap.put(each.Email, each.Name);
+                    emailNameMap.put(each.Email, each.Name);
+                }
             }
         }
         else if (portalType == 'Dealer' || portalType == 'Carbots' ) {
@@ -181,18 +276,22 @@ public class ChatPortalController {
                     System.debug('Inside Dealer Lead Manager');
                     if(dealerLead.Manager_Email__c != null && dealerLead.Manager_Name__c != null ){
                         nameEmailMap.put(dealerLead.Manager_Name__c, dealerLead.Manager_Email__c);
+                        emailNameMap.put(dealerLead.Manager_Email__c, dealerLead.Manager_Name__c);
                         senderOptions.add(new SelectOption(dealerLead.Manager_Email__c, dealerLead.Manager_Name__c));
                     } 
                     if(dealerLead.Dealer_Pro_1_Email__c != null && dealerLead.Dealer_Pro_1_Name__c != null ){
                         nameEmailMap.put(dealerLead.Dealer_Pro_1_Name__c, dealerLead.Dealer_Pro_1_Email__c);
+                        emailNameMap.put(dealerLead.Dealer_Pro_1_Email__c, dealerLead.Dealer_Pro_1_Name__c);
                         senderOptions.add(new SelectOption(dealerLead.Dealer_Pro_1_Email__c, dealerLead.Dealer_Pro_1_Name__c));
                     } 
                     if(dealerLead.Dealer_Pro_2_Email__c != null && dealerLead.Dealer_Pro_2_Name__c != null ){
                         nameEmailMap.put(dealerLead.Dealer_Pro_2_Name__c, dealerLead.Dealer_Pro_2_Email__c);
+                        emailNameMap.put(dealerLead.Dealer_Pro_2_Email__c, dealerLead.Dealer_Pro_2_Name__c);
                         senderOptions.add(new SelectOption(dealerLead.Dealer_Pro_2_Email__c, dealerLead.Dealer_Pro_2_Name__c));
                     } 
                     if(dealerLead.Dealer_Pro_3_Email__c != null && dealerLead.Dealer_Pro_3_Name__c != null ){
                         nameEmailMap.put(dealerLead.Dealer_Pro_3_Name__c, dealerLead.Dealer_Pro_3_Email__c);
+                        emailNameMap.put(dealerLead.Dealer_Pro_3_Email__c, dealerLead.Dealer_Pro_3_Name__c);
                         senderOptions.add(new SelectOption(dealerLead.Dealer_Pro_3_Email__c, dealerLead.Dealer_Pro_3_Name__c));
                     }
                     System.debug('Inside Dealer Lead Manager'); 
@@ -212,6 +311,7 @@ public class ChatPortalController {
             Portal_Message__c newPM = new Portal_Message__c();
             newPM.Message__c = newMessage;
             newPM.Opportunity__c = opportunity.Id;
+            newPM.Message_Sent_Date_Time__c = System.now();
             if(selectedSender == 'Agent'){
                 newPM.Sender_Email__c = UserInfo.getUserEmail();
             }
@@ -219,9 +319,10 @@ public class ChatPortalController {
                 newPM.Sender_Email__c = selectedSender;
             }
 
-            if(portalType == 'MSR'){
-                newPM.Portal_Type__c = 'MSR';
+            if(portalType == 'MSR' || portalType == 'Advisor' ){
+                newPM.Portal_Type__c = portalType;
             }
+
             else if(portalType == 'Dealer' || portalType == 'Carbots'){
                 String recordTypeId = Schema.getGlobalDescribe().get('Contact').getDescribe().getRecordTypeInfosByDeveloperName().get('Auto_Shopper_Carbots').getRecordTypeId();
                 newPM.Portal_Type__c = opportunity.Auto_Shopper__r.RecordTypeId == recordTypeId? 'Carbots' : 'Dealer';
@@ -229,24 +330,25 @@ public class ChatPortalController {
                 //newPM.Sender_Email__c = nameEmailMap.get(selectedSender);
                 String chatLink;
                 if(garageId != null){
-                List<Garage__c> Garage = [SELECT Id, Name, VIN__c, Chat_Id__c, Opportunity__c,Dealer__c, Dealer__r.FastPass_Dealer_Id__c, FastPass_Vehicle_Id__c, Lead_Dealer__c, Lead_Dealer__r.FastPass_Dealer_Id__c FROM Garage__c WHERE Id =:garageId ]; 
+                List<Garage__c> Garage = [SELECT Id, Name, VIN__c, Chat_Id__c, Opportunity__c,Dealer__c, Dealer__r.FastPass_Dealer_Id__c, FastPass_Vehicle_Id__c, Lead_Dealer__c, Lead_Dealer__r.FastPass_Dealer_Id__c, Top_5_List__c FROM Garage__c WHERE Id =:garageId ]; 
                     if(Garage.size() > 0){
                         chatLink = Garage[0].Chat_Id__c;
-                    }
-                    Garage__c garageUpdate = new Garage__c();
-                    garageUpdate.Id = garageId;
-                    if(memberMsgCount == 1 &&  dealerMsgCount >= 1){
-                        garageUpdate.Send_Generic_Notification__c = true;
-                    }
-                    garageUpdate.Last_Dealer_Response_Test_Drive__c = System.now();
-                    Update garageUpdate;
-                    if(chatLink != null){
-                        callFastPassWebhook(chatLink);
-                    }
-                    if((memberMsgCount == 1 && (dealerMsgCount == null || dealerMsgCount == 0) ) || memberMsgCount > 1){
-                        System.debug('Before Send SMS ');
-                        SendSMS(garageUpdate.Id);
-                        
+                    
+                        Garage__c garageUpdate = new Garage__c();
+                        garageUpdate.Id = garageId;
+                        if(memberMsgCount == 1 &&  dealerMsgCount >= 1 && Garage[0].Top_5_List__c == true){
+                            garageUpdate.Send_Generic_Notification__c = true;
+                        }
+                        garageUpdate.Last_Dealer_Response_Test_Drive__c = System.now();
+                        Update garageUpdate;
+                        if(chatLink != null){
+                            callFastPassWebhook(chatLink);
+                        }
+                        if((memberMsgCount == 1 && (dealerMsgCount == null || dealerMsgCount == 0) ) || memberMsgCount > 1 && Garage[0].Top_5_List__c == true){
+                            System.debug('Before Send SMS ');
+                            SendSMS(garageUpdate.Id);
+                            
+                        }
                     }
                 }
             }
@@ -358,16 +460,12 @@ public class ChatPortalController {
     }
     }
 
-
-
     public class MessageWrapper {
         public string message {get;set;}
         public DateTime createdDate {get;set;}
         public string fromAddress {get;set;}
         public string name {get;set;}
         public string styleClass {get;set;}
-        
-    
     }
 
 }
