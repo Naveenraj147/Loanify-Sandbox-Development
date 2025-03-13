@@ -444,13 +444,13 @@ public class PortalMessageTriggerHelper {
         if(pmCBMessageIds.size() > 0){
             List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
             List<EmailTemplate> template = [SELECT Id, DeveloperName FROM EmailTemplate WHERE DeveloperName = 'Email_Notification_to_Member' LIMIT 1];
-            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Message__c,Opportunity__c, Opportunity__r.Auto_Shopper__c, Garage__c, Opportunity__r.Auto_Shopper__r.Name, Garage__r.Send_Generic_Notification__c, Garage__r.Top_5_List__c, Opportunity__r.Auto_Shopper__r.Email
+            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Message__c,Opportunity__c, Opportunity__r.Auto_Shopper__c, Garage__c, Opportunity__r.Auto_Shopper__r.Name, Garage__r.Send_Generic_Notification__c, Garage__r.Is_Vehicle_In_Top_List__c, Opportunity__r.Auto_Shopper__r.Email
                                                 FROM Portal_Message__c
-                                                WHERE Id IN:pmCBMessageIds];
+                                                WHERE Id IN:pmCBMessageIds]; 
             EmailTemplate emailTemp = template.size() > 0? template[0] : null; 
                 if(pmList.size() > 0 && emailTemp != null){
                     for(Portal_Message__c eachPM : pmList){
-                        if(eachPM.Opportunity__r.Auto_Shopper__r.Email != null && eachPM.Garage__r.Send_Generic_Notification__c != true && eachPM.Garage__r.Top_5_List__c == true){
+                        if(eachPM.Opportunity__r.Auto_Shopper__r.Email != null && eachPM.Garage__r.Send_Generic_Notification__c != true && eachPM.Garage__r.Is_Vehicle_In_Top_List__c == true){ 
                             Messaging.SingleEmailMessage emailTempRender = Messaging.renderStoredEmailTemplate(emailTemp.Id, null, eachPM.Garage__c);
                             Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
                             String subject = emailTempRender.getSubject(); 

@@ -11,7 +11,7 @@ global without sharing class AzureIntegrationService {
             RestResponse res = RestContext.response;
             action = req.requestURI.substring(req.requestURI.lastIndexOf('/')+1);
             System.debug('Action: '+action);
-            if(action=='CreateMemberData' || action=='CreateDealerProData' || action=='CreateServiceRepData' || action=='CreateCarbotsMemberData'){
+            if(action=='CreateMemberData' || action=='CreateDealerProData' || action=='CreateServiceRepData' || action=='CreateCarbotsMemberData' || action=='CreateCUnexusMemberData'){
                 wrapper = createContacts();
             }else if(action=='CreateLoanData'){
                 wrapper = createOpportunities();
@@ -96,7 +96,7 @@ global without sharing class AzureIntegrationService {
         CreateResponseWrapper wrapper = new CreateResponseWrapper();
         // Deserialize the JSON request body into a list of Contact records
         List<Contact> conList = (List<Contact>)JSON.deserialize(req.requestBody.tostring(), List<Contact>.class);
-        String conRecTypeName = action=='CreateMemberData' ? 'Auto_Shopper' : action=='CreateDealerProData' ? 'Auto_Dealer_Pro' : action=='CreateServiceRepData' ? 'Bank_Service_Rep' : action=='CreateCarbotsMemberData' ? 'Auto_Shopper_Carbots' : null;
+        String conRecTypeName = action=='CreateMemberData' ? 'Auto_Shopper' : action=='CreateDealerProData' ? 'Auto_Dealer_Pro' : action=='CreateServiceRepData' ? 'Bank_Service_Rep' : action=='CreateCarbotsMemberData' ? 'Auto_Shopper_Carbots' : action=='CreateCUnexusMemberData' ? 'Auto_Shopper_CUnexus' : null;
         RecordType conRecType = [SELECT Id, Name, DeveloperName, SobjectType FROM RecordType where SobjectType = 'Contact' and DeveloperName=:conRecTypeName];
         Set<String> emailSet = new Set<String>();
         //assign record type
@@ -105,6 +105,10 @@ global without sharing class AzureIntegrationService {
             if(conRecTypeName == 'Auto_Shopper_Carbots'){
                 each.Source__c = 'Carbots';
             }
+            else if(conRecTypeName == 'Auto_Shopper_CUnexus'){
+                each.Source__c = 'CUNexus';
+            }
+            
             each.RecordTypeId = conRecType!=null ? conRecType.Id : null;
             if(each.Email!=null)
                 emailSet.add(each.Email);

@@ -936,6 +936,13 @@ global with sharing class FastPassIntegrationService {
                 sendErrorEmail('failed to process processTopFiveList.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Top Five List');
                 return wrapper;
             }
+            if(processType != 'add' && processType != 'remove'){
+                wrapper.error = new Map<String, String>{
+                    'Error' => 'Invalid ProcessType: ' + processType
+                        };
+                sendErrorEmail('failed to process processTopFiveList.', 'Invalid ProcessType: ' + processType+'<br/>Request Type: Top Five List');
+                return wrapper;
+            }
 
             Opportunity opp = getOpportunity(memberLoanId);
 
@@ -956,7 +963,7 @@ global with sharing class FastPassIntegrationService {
             else{
                 Garage__c updateGarage = new Garage__c();
                 updateGarage.Id = garage.Id;
-                updateGarage.Top_5_List__c = processType == 'add'? True: False;
+                updateGarage.Is_Vehicle_In_Top_List__c = processType == 'add'? True: False;
                 update updateGarage;
 
                 String message = processType == 'add' ? 'Vehicle added to Top 5 List': 'Vehicle removed from Top 5 List';

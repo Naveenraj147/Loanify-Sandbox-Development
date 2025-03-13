@@ -32,7 +32,6 @@ public class ContactTriggerHandler {
     }
     
     public void onAfterInsert(){
-       // helper.handlePendingRequestsInGarage(newMap); 
         helper.processPortalMessages(newList);
     }
     
@@ -51,7 +50,7 @@ public class ContactTriggerHandler {
     
     public void onAfterUpdate(){
         
-       // helper.handlePendingRequestsInGarage1(oldMap, newMap);
+      
         helper.processPMforContactUpdate(newList, oldMap);
         
         System.debug('Insert Contact On After Method');

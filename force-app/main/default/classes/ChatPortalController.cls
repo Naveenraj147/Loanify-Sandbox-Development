@@ -330,13 +330,13 @@ global class ChatPortalController {
                 //newPM.Sender_Email__c = nameEmailMap.get(selectedSender);
                 String chatLink;
                 if(garageId != null){
-                List<Garage__c> Garage = [SELECT Id, Name, VIN__c, Chat_Id__c, Opportunity__c,Dealer__c, Dealer__r.FastPass_Dealer_Id__c, FastPass_Vehicle_Id__c, Lead_Dealer__c, Lead_Dealer__r.FastPass_Dealer_Id__c, Top_5_List__c FROM Garage__c WHERE Id =:garageId ]; 
+                List<Garage__c> Garage = [SELECT Id, Name, VIN__c, Chat_Id__c, Opportunity__c,Dealer__c, Dealer__r.FastPass_Dealer_Id__c, FastPass_Vehicle_Id__c, Lead_Dealer__c, Lead_Dealer__r.FastPass_Dealer_Id__c, Is_Vehicle_In_Top_List__c	 FROM Garage__c WHERE Id =:garageId ]; 
                     if(Garage.size() > 0){
                         chatLink = Garage[0].Chat_Id__c;
                     
                         Garage__c garageUpdate = new Garage__c();
                         garageUpdate.Id = garageId;
-                        if(memberMsgCount == 1 &&  dealerMsgCount >= 1 && Garage[0].Top_5_List__c == true){
+                        if(memberMsgCount == 1 &&  dealerMsgCount >= 1 && Garage[0].Is_Vehicle_In_Top_List__c	 == true){ 
                             garageUpdate.Send_Generic_Notification__c = true;
                         }
                         garageUpdate.Last_Dealer_Response_Test_Drive__c = System.now();
@@ -344,7 +344,7 @@ global class ChatPortalController {
                         if(chatLink != null){
                             callFastPassWebhook(chatLink);
                         }
-                        if((memberMsgCount == 1 && (dealerMsgCount == null || dealerMsgCount == 0) ) || memberMsgCount > 1 && Garage[0].Top_5_List__c == true){
+                        if((memberMsgCount == 1 && (dealerMsgCount == null || dealerMsgCount == 0) ) || memberMsgCount > 1 && Garage[0].Is_Vehicle_In_Top_List__c == true){ 
                             System.debug('Before Send SMS ');
                             SendSMS(garageUpdate.Id);
                             
