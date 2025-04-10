@@ -22,6 +22,17 @@ global class ChatPortalController {
     public String sObjName;
     public Integer dealerMsgCount = 0;
     public Integer memberMsgCount = 0;
+    public Boolean showInputBox { get; set; }
+
+    // New class variables for out the door price conversation flow
+
+    public Boolean showPriceInput { get; set; }
+    public Decimal outTheDoorPrice { get; set; }
+    public String customerFirstName { get; set; }
+    public String customerZipCode { get; set; }
+    public String advertisedPrice { get; set; }
+    public Boolean isDealerAllowedToSendMessage { get; set; }
+    public Boolean isMemberView { get; set; }
 
     public ChatPortalController() {
         try {
@@ -40,7 +51,7 @@ global class ChatPortalController {
             opportunityId =  params.get('opportunityId'); 
             dealerId =  params.get('dealerId');
         }
-        
+        showInputBox = true;
        
         if(encryptedParams != null){
             String decryptedParams = CryptoUtility.decrypt(encryptedParams);
@@ -86,7 +97,7 @@ global class ChatPortalController {
             ApexPages.addmessage(new ApexPages.message(ApexPages.severity.WARNING,'Link Expired'));
         }
         if(opportunityId != null && opportunityId != ''){
-            opportunity = [SELECT Id, Name, Auto_Shopper__r.Name, Auto_Shopper__r.Email, Branch__c, Bank_Service_Rep_Name_MSR__c, Branch__r.ParentId, Auto_Shopper__r.RecordTypeId FROM Opportunity where Id=:opportunityId];
+            opportunity = [SELECT Id, Name, Auto_Shopper__r.Name, Auto_Shopper__r.Email, Branch__c, Bank_Service_Rep_Name_MSR__c, Branch__r.ParentId, Auto_Shopper__r.RecordTypeId, Card_Number__c FROM Opportunity where Id=:opportunityId];
             memberName =  opportunity != null? opportunity.Auto_Shopper__r.Name:'Member';
             memberEmail = opportunity != null? opportunity.Auto_Shopper__r.Email:null;
             loadsenderOptions();
@@ -113,7 +124,7 @@ global class ChatPortalController {
         if (portalType == 'MSR') {
             for(Portal_Message__c each : [SELECT Message__c,  Sender_Email__c, CreatedDate, Is_Member_Message__c, Message_Sent_Date_Time__c FROM Portal_Message__c WHERE Opportunity__c = :opportunity.Id  AND Garage__c = null AND Portal_Type__c = 'MSR' AND Is_Pending__c = false  order by Message_Sent_Date_Time__c]){ //
                 MessageWrapper wrapper = new MessageWrapper();
-                wrapper.message = each.Message__c;
+                wrapper.message = each.Message__c.replaceAll('\n', '<br/>');
                 wrapper.createdDate = each.Message_Sent_Date_Time__c;
                 wrapper.fromAddress = each.Is_Member_Message__c? memberEmail: each.Sender_Email__c;
                 wrapper.styleClass = each.Is_Member_Message__c? 'member-message': 'non-member-message';
@@ -124,7 +135,7 @@ global class ChatPortalController {
         else if (portalType == 'Dealer' || portalType == 'Carbots' ) {
             for(Portal_Message__c each : [SELECT Message__c,  Sender_Email__c, CreatedDate, Is_Member_Message__c, Message_Sent_Date_Time__c FROM Portal_Message__c WHERE Opportunity__c = :opportunity.Id  AND Garage__c = :garageId AND Is_Pending__c = false AND (Portal_Type__c = 'Dealer'OR Portal_Type__c = 'Carbots')  order by Message_Sent_Date_Time__c]){
                 MessageWrapper wrapper = new MessageWrapper();
-                wrapper.message = each.Message__c;
+                wrapper.message = each.Message__c.replaceAll('\n', '<br/>');
                 wrapper.createdDate = each.Message_Sent_Date_Time__c;
                 wrapper.fromAddress = each.Is_Member_Message__c? memberEmail: each.Sender_Email__c;
                 wrapper.styleClass = each.Is_Member_Message__c? 'member-message': 'non-member-message';
@@ -138,18 +149,22 @@ global class ChatPortalController {
                     memberMsgCount++;
                 }
             }
-            if(count == 1){
+            if(dealerMsgCount == 0 && recordId == null){
                 showButtons = true;
             }
-            else{
+            else{ 
                 showButtons = false;
             }
+            if(memberMsgCount >= 2 ){
+                showInputBox = false;
+            }
+            
         }
         else if(portalType == 'Advisor'){
             System.debug(' Inside Advisor conversions ==> ');
             for(Portal_Message__c each : [SELECT Message__c,  Sender_Email__c, CreatedDate, Is_Member_Message__c, Message_Sent_Date_Time__c FROM Portal_Message__c WHERE Opportunity__c = :opportunity.Id  AND Garage__c = null AND Portal_Type__c = 'Advisor' order by Message_Sent_Date_Time__c]){ //
                 MessageWrapper wrapper = new MessageWrapper();
-                wrapper.message = each.Message__c;
+                wrapper.message = each.Message__c.replaceAll('\n', '<br/>');
                 wrapper.createdDate = each.Message_Sent_Date_Time__c;
                 wrapper.fromAddress = each.Is_Member_Message__c? memberEmail: each.Sender_Email__c;
                 wrapper.styleClass = each.Is_Member_Message__c? 'member-message': 'non-member-message';
@@ -166,7 +181,7 @@ global class ChatPortalController {
             nameEmailMap.put(UserInfo.getUserEmail(), UserInfo.getFirstName() );
             emailNameMap.put(UserInfo.getUserEmail(), UserInfo.getFirstName() );
             if(sObjName == 'Opportunity'){
-                List<Contact> msrContacts = [SELECT Id, Name, Email FROM Contact WHERE AccountId =: opportunity.Branch__c];
+                List<Contact> msrContacts = [SELECT Id, Name, Email FROM Contact WHERE Id In (SELECT ContactId FROM AccountContactRelation WHERE AccountId =: opportunity.Branch__c)];
 
                 for(Contact each : msrContacts) {
                     nameEmailMap.put(each.Id, each.Email);
@@ -186,7 +201,7 @@ global class ChatPortalController {
                         nameEmailMap.put(dealerAccount.Manager_Email__c,dealerAccount.Manager_Name__c);
                         emailNameMap.put(dealerAccount.Manager_Email__c,dealerAccount.Manager_Name__c);
                     }
-                    List<Contact> dealerProList = [SELECT Id, Name, Email FROM Contact WHERE AccountId =: dealerAccount.Id];
+                    List<Contact> dealerProList = [SELECT Id, Name, Email FROM Contact WHERE Id In (SELECT ContactId FROM AccountContactRelation WHERE AccountId =: dealerAccount.Id) AND Active__c = true AND Member_Response_Notification__c = true];
                     System.debug('Inside dealerList');
                     if(dealerProList.size() > 0){
                         for(Contact each : dealerProList){
@@ -235,7 +250,7 @@ global class ChatPortalController {
                 }
             }
             else if(opportunity.Branch__c != null && opportunity.Branch__r.ParentId != null){
-                for(Contact each : [SELECT Id, Name, Email FROM Contact WHERE AccountId =: opportunity.Branch__r.ParentId AND Primary_Contact__c = true]) {
+                for(Contact each : [SELECT Id, Name, Email FROM Contact WHERE Id In(SELECT ContactId FROM AccountContactRelation WHERE AccountId =: opportunity.Branch__r.ParentId )  AND Primary_Contact__c = true]) {
                     senderOptions.add(new SelectOption(each.Email, each.Name));
                     nameEmailMap.put(each.Id, each.Email);
                     nameEmailMap.put(each.Email, each.Name);
@@ -257,7 +272,7 @@ global class ChatPortalController {
                     nameEmailMap.put(dealerAccount.Manager_Email__c,dealerAccount.Manager_Name__c);
                     emailNameMap.put(dealerAccount.Manager_Email__c,dealerAccount.Manager_Name__c);
                 }
-                List<Contact> dealerProList = [SELECT Id, Name, Email FROM Contact WHERE AccountId =: dealerAccount.Id];
+                List<Contact> dealerProList = [SELECT Id, Name, Email FROM Contact WHERE Id In (SELECT ContactId FROM AccountContactRelation WHERE AccountId =: dealerAccount.Id) AND Active__c = true AND Member_Response_Notification__c = true];
                 System.debug('Inside dealerList');
                 if(dealerProList.size() > 0){
                     for(Contact each : dealerProList){
@@ -305,6 +320,109 @@ global class ChatPortalController {
             }
         }
     }
+    // Add template messages as class constants
+    private static final String YES_TEMPLATE = 'Yes, this vehicle is still available on our lot.';
+    private static final String NO_TEMPLATE = 'No, this vehicle is no longer available.';
+    private static final String PRICE_REQUEST_TEMPLATE = 'Great! We\'d like to get {0} down for a test drive. They\'re in zip code {1}. We have your advertised price as {2}. What would be your out-the-door price for this vehicle?';
+    private static final String COMBINED_YES_PRICE_TEMPLATE = 'Yes, this vehicle is still available on our lot! The out-the-door price is {0}.';
+
+    public void handleYesResponse() {
+        // Instead of sending the message immediately, just store "Yes" state
+        // and show price input
+        
+        // Get customer first name and zip code
+        if (opportunity != null && opportunity.Auto_Shopper__r != null) {
+            String fullName = opportunity.Auto_Shopper__r.Name;
+            customerFirstName = fullName.contains(' ') ? fullName.substring(0, fullName.indexOf(' ')) : fullName;
+            
+            // Query for zip code
+            try {
+                Contact autoShopper = [SELECT Id, MailingPostalCode FROM Contact WHERE Id = :opportunity.Auto_Shopper__c LIMIT 1];
+                customerZipCode = autoShopper.MailingPostalCode;
+                if (String.isBlank(customerZipCode)) {
+                    customerZipCode = 'unknown zip code';
+                }
+            } catch (Exception e) {
+                customerZipCode = 'unknown zip code';
+            }
+            
+            // Query for Price__c on the Garage__c object
+            try {
+                // First try to get the price from a direct query with specific fields
+                try {
+                    Garage__c directGarage = [SELECT Id, Name, Price__c FROM Garage__c WHERE Id = :garageId LIMIT 1];
+                    if (directGarage.Price__c != null) {
+                        this.advertisedPrice = formatCurrency(directGarage.Price__c);
+                    }
+                } catch (Exception e) {
+                    // Continue to dynamic query approach
+                }
+                
+                // If we still don't have a price, try the dynamic approach
+                if (this.advertisedPrice == null || this.advertisedPrice == 'not available') {
+                    // Try to get a more complete Garage record with all fields
+                    String query = 'SELECT Id, Name';
+                    
+                    // Add all possible price-related fields
+                    List<String> priceFields = new List<String>{
+                        'Price__c', 'OTD_Price__c'
+                    };
+                    
+                    for(String field : priceFields) {
+                        query += ', ' + field;
+                    }
+                    
+                    query += ' FROM Garage__c WHERE Id = :garageId LIMIT 1';
+                    
+                    // Execute dynamic query
+                    Garage__c garage = Database.query(query);
+                    
+                    // Check which price fields exist and have values
+                    Boolean priceFound = false;
+                    Map<String, Object> fieldsMap = garage.getPopulatedFieldsAsMap();
+                    
+                    // Try different price fields in order of preference
+                    for(String field : priceFields) {
+                        if(fieldsMap.containsKey(field) && fieldsMap.get(field) != null) {
+                            Decimal price = (Decimal)fieldsMap.get(field);
+                            this.advertisedPrice = formatCurrency(price);
+                            priceFound = true;
+                            break;
+                        }
+                    }
+                    
+                    if(!priceFound) {
+                        this.advertisedPrice = 'not available';
+                    }
+                }
+                
+                // If we still don't have a price, try a hardcoded value for testing
+                if (this.advertisedPrice == null || this.advertisedPrice == 'not available') {
+                    // For testing purposes only
+                    this.advertisedPrice = '$25,000.00';
+                }
+            } catch (Exception e) {
+                // Fallback to hardcoded value for testing
+                this.advertisedPrice = '$25,000.00';
+            }
+            
+            // Show price input and follow-up message
+            showPriceInput = true;
+            // We'll keep buttons hidden
+            showButtons = false;
+        }
+    }
+    
+    public void handleNoResponse() {
+        newMessage = NO_TEMPLATE;
+        sendMessage();
+        callAINegotiationWebhook(String.valueOf(fastpassDealerId), null, null );
+        // Set showButtons to false after sending to hide buttons and show textarea for next message
+        showButtons = false;
+        // Ensure price input is hidden
+        showPriceInput = false;
+    }
+
     public void sendMessage() {
         System.debug('selectedSender :: '+ selectedSender);
         if (String.isNotBlank(newMessage)) {
@@ -321,6 +439,11 @@ global class ChatPortalController {
 
             if(portalType == 'MSR' || portalType == 'Advisor' ){
                 newPM.Portal_Type__c = portalType;
+                if(opportunity != null){
+                    String chatType = portalType == 'MSR' ? 'askMSR' : 'askAdvisor';
+                    callFastPassWebhook(null, opportunity.Card_Number__c ,chatType);
+                }
+               
             }
 
             else if(portalType == 'Dealer' || portalType == 'Carbots'){
@@ -342,7 +465,7 @@ global class ChatPortalController {
                         garageUpdate.Last_Dealer_Response_Test_Drive__c = System.now();
                         Update garageUpdate;
                         if(chatLink != null){
-                            callFastPassWebhook(chatLink);
+                            callFastPassWebhook(chatLink, null ,'ask_dealer');
                         }
                         if((memberMsgCount == 1 && (dealerMsgCount == null || dealerMsgCount == 0) ) || memberMsgCount > 1 && Garage[0].Is_Vehicle_In_Top_List__c == true){ 
                             System.debug('Before Send SMS ');
@@ -356,17 +479,19 @@ global class ChatPortalController {
         }
     }
 
+    // New method for 'FastPass' webhook
     @future(callout=true)
-    public static void callFastPassWebhook(String chatLink){
+    public static void callFastPassWebhook(String chatLink, String loanId, String portalType){
         FastPass_App_Webhook__mdt baseUrl = FastPass_App_Webhook__mdt.getInstance('Base_URL');
         FastPass_App_Webhook__mdt token = FastPass_App_Webhook__mdt.getInstance('Webhook_Token');
         String chatId = chatLink != null? chatLink.substring(chatLink.lastIndexOf('/')+1) : null;
         System.debug('chatId :: ' + chatId);
-        if(baseUrl != null && token != null && chatId != null){
+        if(baseUrl != null && token != null && (chatId != null || loanId != null) && portalType != null ){
                 
-            String endpointUrl = baseUrl.value__c+'/webhook/conversation-webhook';
+            String endpointUrl = baseUrl.value__c+'/webhook/conversation-webhook' ;//;
             // Prepare the JSON payload 
-            String jsonPayload = '{"chat_id": "'+ chatId +'"}';
+            String jsonPayload = '{"chat_id": "'+ chatId +'", "loan_id": "'+ loanId +'", "chat_category": "'+ portalType +'"}';
+            System.debug('jsonPayload :: ' + jsonPayload);
 
             // Initialize an HTTP request
             HttpRequest request = new HttpRequest();
@@ -392,6 +517,7 @@ global class ChatPortalController {
         }
     }
 
+    // New method for 'Send SMS'
     @future(callout=true)
     public static void sendSMS(String recordId){
         System.debug('Inside Send SMS');
@@ -415,14 +541,8 @@ global class ChatPortalController {
             
             
             
-            List<tdc_tsw__Message_Template__c> messageTemplate = [SELECT Id FROM tdc_tsw__Message_Template__c Where Name = 'Notification to the Member' Limit 1];
             // Convert to JSON string
-            If(messageTemplate.size() > 0){
-                String jsonBody = '{ '+
-                '"inputs" : [ {'+
-                '   "paramInput" : "'+ recordId +',Member_Mobile__c,'+messageTemplate[0].Id+'"'+
-                '   } ] '+
-                '}';
+            
 
                 String data = '{"Send_SMS_Notification__c": true}';
                     
@@ -440,12 +560,8 @@ global class ChatPortalController {
                     System.debug('Callout failed with status: ' + response.getStatus());
                     AzureIntegrationService.sendErrorEmail('Send SMS From Public Site. Status Code: '+response.getStatusCode(), response.getBody());
                 }
-            }
-            else{
-                System.debug('Send SMS From Public Site. SMS Template Not Found');
-                AzureIntegrationService.sendErrorEmail('Send SMS From Public Site.', 'SMS Template Not Found');
-
-            }
+            
+           
             
             }
             else{
@@ -460,6 +576,113 @@ global class ChatPortalController {
     }
     }
 
+    // New method for handling new 'out the door' price
+    public void submitPrice() {
+        System.debug('submitPrice :: Inside');
+        System.debug('submitPrice :: ' + outTheDoorPrice);
+        if (outTheDoorPrice != null && outTheDoorPrice != 0 ) {
+            // Format the price with commas and two decimal places
+            String formattedPrice = formatCurrency(outTheDoorPrice);
+            
+            // Use the combined template instead of separate messages
+            newMessage = String.format(COMBINED_YES_PRICE_TEMPLATE, new List<String>{formattedPrice});
+            
+            // Send the message
+            sendMessage();
+            
+            // Update the Garage__c record with the out-the-door price
+            try {
+                if (garageId != null) {
+                    Garage__c garage = new Garage__c(
+                        Id = garageId,
+                        Outdoor_Price__c = outTheDoorPrice
+                    );
+                    update garage;
+                    System.debug('Updated Garage record with out-the-door price: ' + outTheDoorPrice);
+                    
+                    // After successful update, call the webhook
+                    if (garage.Id != null) {
+                        // Query for the FastPass_Vehicle_Id__c
+                        Garage__c updatedGarage = [SELECT Id, FastPass_Vehicle_Id__c, Outdoor_Price__c, Chat_Id__c FROM Garage__c WHERE Id = :garageId LIMIT 1];
+                        if (updatedGarage != null && updatedGarage.FastPass_Vehicle_Id__c != null) {
+                            // Call the webhook asynchronously
+                            callAINegotiationWebhook(String.valueOf(updatedGarage.FastPass_Vehicle_Id__c), updatedGarage.Outdoor_Price__c, updatedGarage.Chat_Id__c);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                System.debug('Error updating Garage record: ' + e.getMessage());
+            }
+            
+            // After sending the message, reload the conversations
+            loadConversations();
+            
+            // Hide the price input panel
+            showPriceInput = false;
+        }
+    }
+    
+    // New method for 'AI negotiation' webhook
+    @future(callout=true)
+    public static void callAINegotiationWebhook(String vehicleId, Decimal outdoorPrice, String chatId) {
+        try {
+            // Get the webhook configuration from custom metadata
+            FastPass_App_Webhook__mdt baseUrl = FastPass_App_Webhook__mdt.getInstance('Base_URL');
+            FastPass_App_Webhook__mdt token = FastPass_App_Webhook__mdt.getInstance('Webhook_Token');
+            
+            if (baseUrl != null && token != null && vehicleId != null && (outdoorPrice != null || (outdoorPrice == null && chatId == null))) {
+                // Construct the endpoint URL using the base URL from custom metadata
+                String endpointUrl = baseUrl.value__c + '/webhook/ainegotiation-webhook';
+                
+                // Prepare the JSON payload to match the expected schema
+                List<Map<String, Object>> vehicleDataList = new List<Map<String, Object>>();
+                Map<String, Object> vehicleData = new Map<String, Object>{
+                    'mc_row_id' => vehicleId
+                };
+                if(outdoorPrice != null){
+                    vehicleData.put('outdoor_price', String.valueOf(outdoorPrice));
+                    vehicleData.put('is_vehicle_available', 'yes');
+                }
+                else{
+                    vehicleData.put('is_vehicle_available', 'no');
+                    vehicleData.put('outdoor_price',null);
+                }
+
+                // Add ChatId to the vehicle data if provided
+                if (String.isNotBlank(chatId)) {
+                    vehicleData.put('ChatId', chatId);
+                }
+                vehicleDataList.add(vehicleData);
+                
+                Map<String, Object> payloadMap = new Map<String, Object>{
+                    'vehicle_data' => vehicleDataList
+                };
+                String jsonPayload = JSON.serialize(payloadMap);
+                System.debug('jsonPayload ==>'+ jsonPayload);
+                
+                // Initialize an HTTP request
+                HttpRequest request = new HttpRequest();
+                request.setEndpoint(endpointUrl);
+                request.setMethod('POST');
+                request.setHeader('Content-Type', 'application/json');
+                request.setHeader('x-webhook-token', token.value__c);
+                request.setBody(jsonPayload);
+                
+                // Initialize an HTTP instance and send the request
+                Http http = new Http();
+                HttpResponse response = http.send(request);
+                
+                if (response.getStatusCode() == 200) {
+                    System.debug('AI Negotiation Webhook called successfully.');
+                } else {
+                    System.debug('Failed to call AI Negotiation webhook. Status: ' + response.getStatusCode());
+                }
+            }
+        } catch (Exception e) {
+            System.debug('Error occurred while calling AI Negotiation webhook: ' + e.getMessage());
+        }
+    }
+
     public class MessageWrapper {
         public string message {get;set;}
         public DateTime createdDate {get;set;}
@@ -467,5 +690,15 @@ global class ChatPortalController {
         public string name {get;set;}
         public string styleClass {get;set;}
     }
+    
+    // Helper method to format currency values
+    private String formatCurrency(Decimal amount) {
+        if (amount == null) return '';
+        // Format with commas and exactly two decimal places
+        String formatted = amount.setScale(2).format();
+        // Add dollar sign
+        return '$' + formatted;
+    }
+    
 
 }

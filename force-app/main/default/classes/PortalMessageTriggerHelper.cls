@@ -46,10 +46,10 @@ public class PortalMessageTriggerHelper {
                 EmailTemplate rightSwipEmailTemp;
                 tdc_tsw__Message_Template__c smsTemplate;
 
-                List<tdc_tsw__Message_Template__c> smsTemplateList = [SELECT Id, tdc_tsw__SMSBodyNew__c FROM tdc_tsw__Message_Template__c WHERE Name = 'Right_Swipe_Automation_SMS' Limit 1];
-                if(smsTemplateList.size() > 0){
-                    smsTemplate = smsTemplateList[0];
-                }
+                // List<tdc_tsw__Message_Template__c> smsTemplateList = [SELECT Id, tdc_tsw__SMSBodyNew__c FROM tdc_tsw__Message_Template__c WHERE Name = 'Right_Swipe_Automation_SMS' Limit 1];
+                // if(smsTemplateList.size() > 0){
+                //     smsTemplate = smsTemplateList[0];
+                // }
 
                 for (EmailTemplate template : emailTemplates) {
                     if (template.DeveloperName == 'Member_Query_For_Test_Drive_1719900621424') {
@@ -79,19 +79,18 @@ public class PortalMessageTriggerHelper {
                 }
                 accountMap = new Map<Id, Account>([SELECT Id, Name, Manager_Email__c, Manager_Name__c,Manager_Cell_Phone__c FROM Account WHERE Id IN: dealerIds]);
                 LeadMap = new Map<Id, Lead>([SELECT Id, Name, Company, Manager_Email__c, Manager_Name__c, Manager_Cell_Phone__c, Dealer_Pro_1_Email__c, Dealer_Pro_2_Email__c, Dealer_Pro_3_Email__c, Dealer_pro_1_Phone__c, Dealer_pro_2_Phone__c, Dealer_pro_3_Phone__c FROM Lead WHERE Id IN: leadDealerIds]);
-                List<Contact> activeContacts = [SELECT Id, Email, AccountId, Phone, MobilePhone FROM Contact WHERE AccountId IN :dealerIds AND Email!= null AND Active__c = true AND Member_Response_Notification__c = true];
-            
+                List<AccountContactRelation> activeContacts = [SELECT AccountId, ContactId, Contact.Email, Contact.Phone, Contact.MobilePhone FROM AccountContactRelation WHERE AccountId In :dealerIds AND Contact.Email!= null AND Contact.Active__c = true AND Contact.Member_Response_Notification__c = true ];  
                 Map<Id, List<String>> emailMap = new Map<Id, List<String>>();
                 List<String> smsPhoneList = new List<String>();
                 
-                for (Contact con : activeContacts) {
+                for (AccountContactRelation con : activeContacts) {
                     if (!emailMap.containsKey(con.AccountId)) {
                         emailMap.put(con.AccountId, new List<String>());
                         dealerIdToDealerProsPhoneMap.put(con.AccountId, new List<String>());
                     }
-                    emailMap.get(con.AccountId).add(con.Email);
-                    if(con.Phone != null || con.MobilePhone != null){
-                        dealerIdToDealerProsPhoneMap.get(con.AccountId).add(con.Phone!=null? con.Phone: con.MobilePhone );
+                    emailMap.get(con.AccountId).add(con.Contact.Email);
+                    if(con.Contact.Phone != null || con.Contact.MobilePhone != null){
+                        dealerIdToDealerProsPhoneMap.get(con.AccountId).add(con.Contact.Phone!=null? con.Contact.Phone: con.Contact.MobilePhone );
                     }
                     
                 }
@@ -254,8 +253,9 @@ public class PortalMessageTriggerHelper {
                             String memberQuery = protalMessage.Message__c.replaceAll('\n', '<br/>');
                             htmlBody = htmlBody.replace('{firstMessage}', memberQuery);
                             htmlBody = htmlBody.replace('{Link}', '<a href="' +conLink+ '">click here</a>');
-                            String messageText = smsTemplateList.size()>0 ? smsTemplateList[0].tdc_tsw__SMSBodyNew__c : null;
-                            if(messageText != null){
+                          //  String messageText = smsTemplateList.size()>0 ? smsTemplateList[0].tdc_tsw__SMSBodyNew__c : null;
+                          String messageText = null;
+                          if(messageText != null){
                                 system.debug('Inside messageText ===>' );
                                 messageText = messageText.replace('{firstMessage}', MemberQuery);
                                 messageText = messageText.replace('{Link}', conLink);
@@ -264,7 +264,7 @@ public class PortalMessageTriggerHelper {
                                     system.debug('Inside Dealer Check ===>' );
                                     for(String each : dealerIdToDealerProsPhoneMap.get(dealerId)){
                                         system.debug('Inside SMS sending ===>' );
-                                        tdc_tsw.GlobalSMSSender.SendSmsWithPhoneNumberAndMessageText(each,messageText,protalMessage.garage__c) ;
+                                      //  tdc_tsw.GlobalSMSSender.SendSmsWithPhoneNumberAndMessageText(each,messageText,protalMessage.garage__c) ;
                                      }
                                 }
                             }
@@ -343,7 +343,9 @@ public class PortalMessageTriggerHelper {
                 
             } 
             if(ParrentAccountIds.size() > 0 || contactIds.size() > 0){
-                Map<Id, Contact> contactMap = new Map<Id, Contact>([SELECT Id, Name, Email, AccountId  FROM Contact WHERE (AccountId IN: ParrentAccountIds AND Primary_Contact__c = true) OR Id IN: contactIds]);
+                Map<Id, AccountContactRelation> contactMap = new Map<Id, AccountContactRelation>([SELECT Id, Contact.Name, Contact.Email, AccountId  FROM AccountContactRelation WHERE (AccountId IN: ParrentAccountIds AND Contact.Primary_Contact__c = true) OR ContactId IN: contactIds]);
+                Map<Id, String> contactNameMap = new Map<Id, String>();
+                Map<Id, String> msrEmailMap = new Map<Id, String>();
                 Map<Id, List<String>> accountEmailMap =  new Map<Id, List<String>>();
                 Map<Id,String> contactEmailMap = new Map<Id,String>();
                 List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
@@ -352,16 +354,16 @@ public class PortalMessageTriggerHelper {
                                                         FROM EmailTemplate 
                                                         WHERE DeveloperName ='MSR_Notification_for_Member_Message'];
                 if(contactMap.values().size() > 0){
-                    for (Contact con : contactMap.values()) {
+                    for (AccountContactRelation con : contactMap.values()) {
                         if(ParrentAccountIds.contains(con.AccountId)){
                             if (!accountEmailMap.containsKey(con.AccountId)) {
                                 accountEmailMap.put(con.AccountId, new List<String>());
                             }
-                            accountEmailMap.get(con.AccountId).add(con.Email);
+                            accountEmailMap.get(con.AccountId).add(con.Contact.Email);
                         }
-                        else{
-                            contactEmailMap.put(con.Id, con.Email);
-                        }
+                        contactNameMap.put(con.ContactId, con.Contact.Name);
+                        msrEmailMap.put(con.ContactId, con.Contact.Email );
+
                     }
                     // List<EmailTemplate> emailTemplates = [SELECT Id, Name, Subject, HtmlValue, DeveloperName 
                     //                                     FROM EmailTemplate 
@@ -387,8 +389,8 @@ public class PortalMessageTriggerHelper {
                             htmlBody = htmlBody.replace ('click here', '<a href="' +conLink+ '">click here</a>');
                             email.setWhatId(eachPM.Opportunity__c);
                             if(eachPM.Opportunity__r.Bank_Service_Rep_Name_MSR__c != null){
-                                htmlBody = htmlBody.replace('{{{Credit_UnionName}}}', contactMap.get(eachPM.Opportunity__r.Bank_Service_Rep_Name_MSR__c).Name);
-                                email.setToAddresses(new List<String>{contactMap.get(eachPM.Opportunity__r.Bank_Service_Rep_Name_MSR__c).Email});
+                                htmlBody = htmlBody.replace('{{{Credit_UnionName}}}', contactNameMap.get(eachPM.Opportunity__r.Bank_Service_Rep_Name_MSR__c));
+                                email.setToAddresses(new List<String>{msrEmailMap.get(eachPM.Opportunity__r.Bank_Service_Rep_Name_MSR__c)});
                             }
                             else{
                                 htmlBody = htmlBody.replace('{{{Credit_UnionName}}}', eachPM.Opportunity__r.Branch__r.Name);

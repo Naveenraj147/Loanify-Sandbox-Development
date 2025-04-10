@@ -191,7 +191,7 @@ global without sharing class AzureIntegrationService {
             Map<String,Id> accIdMap = new Map<String,Id>();
             Map<String,Id> conIdMap = new Map<String,Id>();
             Map<Id,Account> accMap = new Map<Id,Account>();
-            Map<Id,Contact> conMap = new Map<Id,Contact>();
+            Map<Id,AccountContactRelation> conMap = new Map<Id,AccountContactRelation>();
             for(Opportunity each : oppList){
                 if(String.isNotBlank(each.Branch__c))
                     accIdMap.put(each.Branch__c,null);
@@ -223,26 +223,39 @@ global without sharing class AzureIntegrationService {
             }
             Map<Id,Map<String,Id>> accConsMap = new Map<Id,Map<String,Id>>();
             if(conIdMap!=null){
-                conMap = new Map<Id,Contact>([select Id,Name,AccountId from Contact where Name in :conIdMap.keySet() and AccountId!=null and RecordType.DeveloperName ='Bank_Service_Rep']);
-                for(Contact con : conMap.values()){
+                conMap = new Map<Id,AccountContactRelation>([select Id, Contact.Name, AccountId, ContactId from AccountContactRelation where Contact.Name in :conIdMap.keySet() and AccountId!=null and Contact.RecordType.DeveloperName ='Bank_Service_Rep']);
+                for(AccountContactRelation con : conMap.values()){
                     if(!accConsMap.containsKey(con.AccountId)){
                         accConsMap.put(con.AccountId, new Map<String,Id>());
                     }
                     Map<String,Id> temp = accConsMap.get(con.AccountId);
-                    temp.put(con.Name,con.Id);
+                    temp.put(con.Contact.Name,con.ContactId);
                     accConsMap.put(con.AccountId,temp);
                 }
             }
+            String msrNullTable = '<table border="1"><tr><th>Card Number</th><th>Branch Name - Id </th><th>MSR Name</th> <th>MSR Ids</th></tr>';
+            Boolean sendNullEmail = false;
             for(Opportunity each : oppList){
                 if(String.isNotBlank(each.Branch__c) && accIdMap.containsKey(each.Branch__c)){
+                    String branchName = each.Branch__c;
                     each.Branch__c = accIdMap.get(each.Branch__c);
                     if(String.isNotBlank(each.Bank_Service_Rep_Name_MSR__c) && accConsMap.containsKey(each.Branch__c)){
                         if(accConsMap.get(each.Branch__c).containsKey(each.Bank_Service_Rep_Name_MSR__c)){
                             each.Bank_Service_Rep_Name_MSR__c = accConsMap.get(each.Branch__c).get(each.Bank_Service_Rep_Name_MSR__c);
-                        }else
+                        }else{
+                            msrNullTable += '<tr><td>'+ each.Card_Number__c + '</td><td>' + branchName + '-' + each.Branch__c + '</td><td>' + each.Bank_Service_Rep_Name_MSR__c + '</td><td>' + accConsMap.get(each.Branch__c) +'</td></tr>';
                             each.Bank_Service_Rep_Name_MSR__c = null;
-                    }else
+                            sendNullEmail = true;
+                        }
+                            
+                    }else{
+                        if(String.isNotBlank(each.Bank_Service_Rep_Name_MSR__c) ){
+                            msrNullTable += '<tr><td>' + branchName + '-' + each.Branch__c + '</td><td>' + each.Bank_Service_Rep_Name_MSR__c + '</td><td>' + 'NA' +'</td></tr>';
+                            sendNullEmail = true;
+                        }
                         each.Bank_Service_Rep_Name_MSR__c = null;
+                        
+                    }
                 }else{
                     each.Branch__c = null;
                     each.Bank_Service_Rep_Name_MSR__c = null;
@@ -272,7 +285,12 @@ global without sharing class AzureIntegrationService {
                     }
                 }
             }
+            if(sendNullEmail){
+                msrNullTable += '</table>';
+                sendErrorEmail('Opportunity MSR is blank ', msrNullTable);
+            }
         }
+        
         wrapper.success = successData;
         wrapper.error = errorData;
         return wrapper;
@@ -868,19 +886,19 @@ body = body.replace('{exceptionMessage}', exceptionMessage);*/
                                     }
                                 }
                             }
-                            // else if (sObjName == 'Lead'){
+                            else if (sObjName == 'Lead'){
                                 
-                            //     List<Lead> leadList = [SELECT Id, Company, RecordType.DeveloperName FROM Lead WHERE Id =: sfId LIMIT 1];
-                            //     if(leadList.size() > 0){
-                            //         Lead lead = leadList[0];
-                            //         data.put('Name', lead.company);
-                            //         if (lead.RecordType.DeveloperName == 'Dealer') {
-                            //             endpointUrl = metaDataField.Update_Dealer__c;
-                            //         } else if (lead.RecordType.DeveloperName == 'Credit_Union') {
-                            //             endpointUrl = metaDataField.Update_Branch__c;
-                            //         }
-                            //     }
-                            // }
+                                List<Lead> leadList = [SELECT Id, Company, RecordType.DeveloperName FROM Lead WHERE Id =: sfId LIMIT 1];
+                                if(leadList.size() > 0){
+                                    Lead lead = leadList[0];
+                                    data.put('Name', lead.company);
+                                    if (lead.RecordType.DeveloperName == 'Dealer') {
+                                        endpointUrl = metaDataField.Update_Dealer__c;
+                                    } else if (lead.RecordType.DeveloperName == 'Credit_Union') {
+                                        endpointUrl = metaDataField.Update_Branch__c;
+                                    }
+                                }
+                            }
                             if (endpointUrl != null) {
                                 System.debug('===> Inside Endpoint URL ');
                                 String requestBody = JSON.serialize(data);

@@ -26,7 +26,8 @@ public class OpportunityTriggerHandler {
                 opp.Mobile__c = ContactTriggerHelper.formatPhoneNumber(opp.Mobile__c, '+1');
             }
         }
-        
+
+         OpportunityTriggerHelper.restrictNonRelatedMSR(newList, null);
     }
     
     
@@ -44,6 +45,7 @@ public class OpportunityTriggerHandler {
                 opp.Mobile__c = ContactTriggerHelper.formatPhoneNumber(opp.Mobile__c, '+1');
             }
         }
+        OpportunityTriggerHelper.restrictNonRelatedMSR(newList, oldMap);
     }
     
      public void onAfterUpdate(){

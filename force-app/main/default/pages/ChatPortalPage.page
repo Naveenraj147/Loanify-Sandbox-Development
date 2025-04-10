@@ -1,6 +1,9 @@
 <apex:page controller="ChatPortalController" showHeader="false" sidebar="false" lightningStylesheets="false" standardStylesheets="false" docType="html-5.0" applyBodyTag="false" cache="false">
     <apex:slds />
     <style>
+     * {
+            font-family: sans-serif;
+        }
         @media only screen and (min-width: 900px) {
         form{
             height: 90vh;
@@ -36,8 +39,7 @@
         .custom-select {
             text-align: center;
             justify-content: center;
-            font-size: 20px;
-            top: 10px;
+            font-size: 15px;
             margin: 10px 0;
             font-family: sans-serif;
             color: black;
@@ -137,7 +139,6 @@
             flex-direction: column; */ 
             padding: 5px;
             align-items: center;
-            height: 40px;
             margin: 0 auto; /*Center horizontally with respect to parent */
         }
         .chat-select-label{
@@ -260,6 +261,7 @@
             display: flex;
             margin-top: 10px;
             align-items: center;
+            justify-content: center;
         }
         .chat-input textarea {
             resize: none;
@@ -275,7 +277,6 @@
             flex-direction: column; */ 
             padding:  -2px 5px 5px 5px;
             align-items: center;
-            height: 40px;
             width: 20%;
             margin: 0px;
             text-align: center;
@@ -334,7 +335,19 @@
             align-self: flex-start;
             margin-right: auto;
             text-align: left;
-            font-size: 1em;
+        }
+        .custom-select {
+            text-align: center;
+            justify-content: center;
+            font-size: 15px;
+            margin: 10px 0;
+            font-family: sans-serif;
+            color: black;
+            font-weight: bold;
+            border: 1px solid black;
+            border-radius: 5px;
+            padding: 5px;
+            transition: border-color 0.3s ease;
         }
         .top-right {
             position: absolute;
@@ -368,7 +381,7 @@
             align-self: flex-start;
             margin-right: auto;
             text-align: left;
-            font-size: 1em;
+            
         }
         .top-right {
             position: absolute;
@@ -407,11 +420,7 @@
         var lexOrigin ="https://loanify--dev--c.sandbox.vf.force.com";
 
         window.addEventListener("message", function(event) {
-
-            console.log("Data from LWC 2 ==> ", event.data);
-            console.log("Data from LWC 2 ==> ", event.origin);
-            
-      
+                  
             // this.callApex(JSON.stringify(event.data));
 
             if(event.origin !== lexOrigin){
@@ -424,13 +433,13 @@
 
         
         function formatMessages() {
-            const messages = document.querySelectorAll('.chat-message-body');
-            console.log("Inside format Messages");
-            messages.forEach(message => {
-                const bodyText = message.getAttribute('data-body');
-                message.innerText = bodyText;
+            // const messages = document.querySelectorAll('.chat-message-body');
+            // console.log("Inside format Messages");
+            // messages.forEach(message => {
+            //     const bodyText = message.getAttribute('data-body');
+            //     message.innerText = bodyText;
                
-            }); 
+            // }); 
 
             const timeElements = document.querySelectorAll('.chat-message-time');
             timeElements.forEach(timeElement => {
@@ -459,28 +468,93 @@
        
     }
     function qusButtonClick(event,button) {
-    event.preventDefault();
-    console.log('Inside qusButtonClick');
-    //makeEditable();
-    const buttonName = button.name;
-    const textAreaInput = document.getElementById('j_id0:chatForm:messageTextarea');
-    if(buttonName == "Yes"){
-        console.log('Yes Button Clicked');
-        textAreaInput.value = "Yes,";
-    }
-    else{
-        console.log('No Button Clicked');
-        textAreaInput.value = "No,";
-    }
-    console.log('textAreaInput.readonly :: ', textAreaInput);
-    console.log('textAreaInput.readonly :: ', textAreaInput.readonly);
-   // textAreaInput.removeAttribute('disabled');
-   // textAreaInput.disabled = false;
-    const buttonContainer  = document.getElementById('buttonContainer');
-     buttonContainer.style.display = 'none';
-     console.log('buttonName  ', buttonName);
-     
-    }
+            event.preventDefault();
+            console.log('Inside qusButtonClick');
+            const buttonName = button.name;
+            if(buttonName == "Yes"){
+                console.log('Yes Button Clicked');
+                handleYesResponse();
+                return false;
+            }
+            else{
+                console.log('No Button Clicked');
+                showBlackout();
+                handleNoResponse();
+                return false;
+            }
+        }
+
+        function validateAndSend() {
+            const textarea = document.getElementById('j_id0:chatForm:messageTextarea');
+            if (!textarea || textarea.value.trim() === '') {
+                alert('Please enter a message before sending.');
+                return false;
+            }
+            showBlackout();
+            console.log('Sending message');
+            return true; // Allow the form submission to proceed
+        }
+        
+        function validateNumberInput(event) {
+            // Allow: backspace, delete, tab, escape, enter, decimal point, and numbers
+            if (event.keyCode === 46 || event.keyCode === 8 || event.keyCode === 9 || event.keyCode === 27 || event.keyCode === 13 || 
+                event.keyCode === 110 || event.keyCode === 190 || 
+                (event.keyCode >= 48 && event.keyCode <= 57) || 
+                (event.keyCode >= 96 && event.keyCode <= 105)) {
+                
+                // Check for decimal point
+                if (event.keyCode === 110 || event.keyCode === 190) {
+                    const input = event.target.value;
+                    if (input.indexOf('.') !== -1) {
+                        // Already has a decimal point
+                        return false;
+                    }
+                }
+                
+                // Ensure only two decimal places
+                if (event.target.value.indexOf('.') !== -1) {
+                    const decimalPart = event.target.value.split('.')[1];
+                    if (decimalPart && decimalPart.length >= 2 && 
+                        !(event.keyCode === 8 || event.keyCode === 46 || event.keyCode === 9 || event.keyCode === 27 || event.keyCode === 13)) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            }
+            
+            // Block all other keys
+            return false;
+        }
+        function formatNumberWithCommas(input) {
+            let value = input.value.replace(/[^0-9.]/g, '');
+            let parts = value.split('.');
+            let integerPart = parts[0];
+            let decimalPart = parts.length > 1 ? '.' + parts[1] : '';
+            integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            input.value = integerPart + decimalPart;
+            let valueInputButton = document.getElementById('j_id0:chatForm:priceSubmitButton');
+            valueInputButton.disabled = false;
+            input.style.border = "2px solid green";
+        }
+
+        function validateInput(input){
+            let valueInput = document.getElementById('j_id0:chatForm:priceInput');
+            valueInput.value = valueInput.value.replace(/,/g, '');
+            if(valueInput.value <= 0 ){
+                valueInput.style.border = "2px solid red";
+                valueInput.placeholder = "Please enter a value";
+                valueInput.classList.add("error-placeholder");
+            }
+            else{
+                showBlackout();
+                submitPrice();
+            }
+           
+            
+            
+            
+        }
 
       function showBlackout() {
         document.getElementById('blackout').style.display = 'block';
@@ -491,6 +565,9 @@
         <div id="blackout" class="blackout">
          <div class="spinner"></div>
         </div>
+        <apex:actionFunction name="handleYesResponse" action="{!handleYesResponse}" reRender="chatForm" oncomplete="formatMessages();"></apex:actionFunction>
+        <apex:actionFunction name="handleNoResponse" action="{!handleNoResponse}" oncomplete="window.location.reload();"></apex:actionFunction>
+        <apex:actionFunction name="submitPrice" action="{!submitPrice}" oncomplete="window.location.reload()"></apex:actionFunction>
         <meta name="viewport" content="width=device-width, initial-scale=0.5, maximum-scale=0.5"/>
         <apex:outputPanel rendered="{!RecordId == null && RecordId == ''}">
         <div class="logo-container" > 
@@ -561,7 +638,9 @@
                 <apex:repeat value="{!messageList}" var="message">
                     <div class="chat-message {!message.styleClass}">
                         <div class="chat-message-sender">{!message.name}</div>
-                        <div class="chat-message-body" data-body="{!message.message}"></div>
+                        <div class="chat-message-body">
+                            <apex:outputText value="{!message.message}" escape="false" />
+                        </div>
                         <div class="chat-message-time">{!message.createdDate}</div>
                     </div>
                 </apex:repeat>
@@ -573,53 +652,122 @@
             </div>
 
       <apex:outputPanel rendered="{!showButtons}">      
-     <div id="buttonContainer" style="display: flex; align-items: center; gap: 10px; justify-content: flex-front; font-family: Arial, sans-serif; margin-top:1%;">
-    <button 
+      <div id="buttonContainer" style="display: flex; align-items: center; gap: 20px; justify-content: center; font-family: Arial, sans-serif; margin-top: 15px; margin-bottom: 15px;">
+   <button 
+
         style="
+
             background-color: transparent;
+
             color: #4CAF50;
-            padding: 6px 20px; /* Reduced height */
-            border: 2px solid #4CAF50;
-            border-radius: 5px;
+
+            padding: 10px 30px; 
+
+            border: 3px solid #4CAF50;
+
+            border-radius: 8px;
+
             cursor: pointer;
-            font-size: 14px;
-            font-weight: bold; /* Bold font */
+
+            font-size: 18px;
+
+            font-weight: bold;
+
+            transition: all 0.3s ease;
+
         "
+
+        onmouseover="this.style.backgroundColor='#4CAF5022'"
+
+        onmouseout="this.style.backgroundColor='transparent'"
+
         onclick="qusButtonClick(event, this)"
+
         name = "Yes" 
+
     >
+
         Yes
+
     </button>
+
     <button 
+
         style="
+
             background-color: transparent;
-            color: #f44336;
-            padding: 6px 20px; /* Reduced height */
-            border: 2px solid #f44336;
-            border-radius: 5px;
+
+            color: #F44336;
+
+            padding: 10px 30px;
+
+            border: 3px solid #F44336;
+
+            border-radius: 8px;
+
             cursor: pointer;
-            font-size: 14px;
-            font-weight: bold; /* Bold font */
+
+            font-size: 18px;
+
+            font-weight: bold;
+
+            transition: all 0.3s ease;
+
         "
-        onclick="qusButtonClick(event, this)"
+
+        onmouseover="this.style.backgroundColor='#F4433622'"
+
+        onmouseout="this.style.backgroundColor='transparent'"
+
+        onclick="this.disabled=true; qusButtonClick(event, this)"
+
         name = "No" 
+
     >
+
         No
+
     </button>
 </div>
 </apex:outputPanel> 
             <div id="chatInput" class="chat-input">
-                <apex:inputTextarea id="messageTextarea" value="{!newMessage}" rows="3" cols="50" onkeypress="handleKeyPress();" disabled="{!IF((ISNULL(messageList) || messageList.size == 0) &&  !(portalType == 'MSR' || portalType == 'Advisor'), true, false)}"/>
+                <apex:inputTextarea id="messageTextarea" value="{!newMessage}" rows="3" cols="50" onkeypress="handleKeyPress();" disabled="{!IF((ISNULL(messageList) || messageList.size == 0 || (showInputBox && recordId == null) )  && !(portalType == 'MSR' || portalType == 'Advisor'), true, false)}" style="display: {!IF(showButtons || showPriceInput, 'none', 'block')};"/>
+                <apex:outputPanel id="priceInputPanel" rendered="{!showPriceInput}" styleClass="price-input-container" >
+                    <div style="margin: 15px 0; text-align: center;">
+                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left; border-left: 4px solid #4CAF50; font-family: sans-serif;">
+                            <p style="margin: 0; font-size: 16px;">
+                                Great! We'd like to get <strong>{!customerFirstName}</strong> down for a test drive. 
+                                They're in zip code <strong>{!customerZipCode}</strong>. We have your advertised price as <strong>{!advertisedPrice}</strong>.
+                                What would be your out-the-door price for this vehicle?
+                            </p>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                            <div style="position: relative; display: inline-block;">
+                                <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-weight: bold; font-family: sans-serif;">$</span>
+                                <apex:inputText id="priceInput" value="{!outTheDoorPrice}" styleClass="price-input" 
+                                              style="padding: 10px 10px 10px 25px; font-size: 16px; border: 2px solid #4CAF50; border-radius: 5px; width: 150px; text-align: right; font-family: sans-serif;"
+                                              onkeypress="return validateNumberInput(event)" 
+                                              onkeyup="formatNumberWithCommas(this)" maxlength="8"/>
+                            </div>
+                            <apex:commandButton id="priceSubmitButton" value="Submit Price" action="{!submitPrice}" 
+                                              styleClass="slds-button slds-button_brand" 
+                                              style="background-color: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 5px; font-size: 16px; cursor: pointer; font-family: sans-serif;"
+                                               status="loading" onclick="this.disabled=true; validateInput(this)"  />
+                        </div>
+
+                    </div>
+
+                </apex:outputPanel>
                 <div class="chat-select-container">
-                    <div class="chat-select-label">Send As</div>
-                    <apex:selectList value="{!selectedSender}" size="1" styleClass="chat-select">
+                    <apex:selectList value="{!selectedSender}" size="1" styleClass="custom-select">
                         <apex:selectOptions value="{!senderOptions}" />
                     </apex:selectList>
                 </div>
-                <apex:actionFunction name="sendMessage" action="{!sendMessage}" oncomplete="window.location.reload();"/>
-                <apex:commandButton image="{!URLFOR($Resource.SendLogo)}" title="Send" action="{!sendMessage}" onclick="this.disabled=true; showBlackout()"  oncomplete="window.location.reload();"/>
-            </div>
-        </div>
+                    <apex:actionFunction name="sendMessage" action="{!sendMessage}" oncomplete="window.location.reload();"/>
+                    <apex:commandButton image="{!URLFOR($Resource.SendLogo)}" title="Send" action="{!sendMessage}" onclick="this.disabled=true; showBlackout()"  oncomplete="window.location.reload();" style="display: {!IF(showButtons || showPriceInput, 'none', 'block')};"/>
+                
+                </div>
+                </div>
             </apex:outputPanel>
     </apex:form>
 </apex:page>

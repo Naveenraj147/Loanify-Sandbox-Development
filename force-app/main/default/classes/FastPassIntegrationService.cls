@@ -1,8 +1,12 @@
 @RestResource(urlMapping='/FastPassIntegrationService/*')
 global with sharing class FastPassIntegrationService {
     @HttpPost
-    global static List<CreateResponseWrapper> doPost() {
+    global static void doPost() {
         List<CreateResponseWrapper> responseList = new List<CreateResponseWrapper>();
+        ResponseWrapper responseWrapper = new ResponseWrapper();
+        responseWrapper.success = new Map<String,String>();
+        responseWrapper.error = new Map<String,String>();
+        String jsonResponse;
         try {
             RestRequest req = RestContext.request;
             // Explicitly deserialize the JSON request body as a list of map
@@ -51,30 +55,49 @@ global with sharing class FastPassIntegrationService {
                     wrapper = requestTestDriveResponse(requestBody);
                 }
                 else if (requestType == 'topFiveList') {
-                    wrapper = processTopFiveList(requestBody);
+                    jsonResponse = processTopFiveList(requestBodyList);
+                    System.debug('Inside jsonResponse processTopFiveList2 ==> '+ jsonResponse);
+                    break;
+
                 }
                 else {
                     wrapper.error = new Map<String, String>{'Message' => 'Could not find a match for RequestType'};
-                        wrapper.success = new SuccesWrapper() ;
                     sendErrorEmail('Failed to ' + requestType, JSON.serialize(wrapper.error));
                 }
-               
-                responseList.add(wrapper);
+                if (!(requestType == 'topFiveList')){
+                    System.debug('Inside responseList adding ==> '+ jsonResponse);
+                    responseList.add(wrapper);
+                }
+                
             }
-            return responseList;  
+            //return responseList;  
+            if(responseList.size() > 0){
+                jsonResponse = JSON.serialize(responseList);
+            }
+            
+
+            RestContext.response.statusCode = 200;
         } catch (Exception e) {
             // Handling Exceptions and returning an error message
-            RestResponse res = RestContext.response;
-            res.statusCode = 500;
             String errorMessage = e.getTypeName() + ': ' + e.getMessage() + ' Line: ' + e.getLineNumber();
             CreateResponseWrapper wrapper = new CreateResponseWrapper();
             wrapper.error = new Map<String, String>{'exception' => 'An internal error has occurred.'};
-                wrapper.success = new SuccesWrapper();
+            wrapper.success = new SuccesWrapper();
             System.debug('Exception:' + errorMessage);
             sendErrorEmail('failed to process request', errorMessage);
             responseList.add(wrapper);
-            return responseList;
+            RestResponse res = new RestResponse();
+            RestContext.response = res;
+            RestContext.response.statusCode = 500;
+            jsonResponse = JSON.serialize(responseList);
+            
+            //return responseList;
         }
+        RestContext.response.addHeader('Content-Type', 'application/json');
+        if(jsonResponse != null){
+            RestContext.response.responseBody = Blob.valueOf(jsonResponse);
+        }
+       
     }
     
     global static CreateResponseWrapper vehicleAddition(Map<String, Object> requestBody) {
@@ -144,7 +167,7 @@ global with sharing class FastPassIntegrationService {
                     List<Contact> conList;
                     List<Lead> leadList;
                     if(accList.size() > 0 ){
-                        conList   = [SELECT Id, Name, AccountId, Active__c, RecordType.DeveloperName FROM Contact WHERE AccountId =: accList[0].Id AND RecordType.DeveloperName = 'Auto_dealer_Pro' AND Active__c = true order by CreatedDate asc];
+                        conList   = [SELECT Id, Name, AccountId, Active__c, RecordType.DeveloperName FROM Contact WHERE Id In (SELECT ContactId FROM AccountContactRelation WHERE AccountId =: accList[0].Id) AND RecordType.DeveloperName = 'Auto_dealer_Pro' AND Active__c = true order by CreatedDate asc];
                     }
                     else{
                         leadList = [SELECT Id, FastPass_Dealer_Id__c, Manager_Email__c, Manager_Name__c, Dealer_Pro_1_Email__c, Dealer_Pro_2_Email__c, Dealer_Pro_3_Email__c FROM Lead WHERE FastPass_Dealer_Id__c =: dealerMarketcheckId];
@@ -214,7 +237,9 @@ global with sharing class FastPassIntegrationService {
         garage.Model__c = model;
         garage.Price__c = price;
         garage.Stock_Number__c = stockNumber;
-        garage.Chat_Id__c = chatId;
+        if(chatId != null ){
+            garage.Chat_Id__c = chatId;
+        }
         
         if(accList.size() > 0){
             Account acc = accList[0];
@@ -330,6 +355,10 @@ global with sharing class FastPassIntegrationService {
         Public integer currentPage;
         Public integer totalPages;
         Public String chatId;
+    }
+    global class ResponseWrapper {
+        public Map<String,String> success;
+        public Map<String,String> error;
     }
     
     global class CreateResponseWrapperSuccess {
@@ -551,7 +580,7 @@ global with sharing class FastPassIntegrationService {
             Account acc = accList.size() > 0 ? accList[0] : null;
 
             if (acc <> null) {
-                conList = [SELECT Id, AccountId, Name, Email, RecordType.DeveloperName from Contact Where AccountId =:acc.Id AND RecordType.DeveloperName = 'Auto_Dealer_Pro' AND Active__c = true order by CreatedDate asc];    
+                conList = [SELECT Id, AccountId, Name, Email, RecordType.DeveloperName from Contact WHERE Id In (SELECT ContactId FROM AccountContactRelation WHERE AccountId =:acc.Id)  AND RecordType.DeveloperName = 'Auto_Dealer_Pro' AND Active__c = true order by CreatedDate asc];    
             }
             else{
                 leadList = [SELECT Id, FastPass_Dealer_Id__c, Manager_Name__c, Manager_Email__c, Dealer_Pro_1_Email__c, Dealer_Pro_2_Email__c, Dealer_Pro_3_Email__c, Company FROM Lead WHERE FastPass_Dealer_Id__c =: dealerMarketcheckId];
@@ -621,6 +650,7 @@ global with sharing class FastPassIntegrationService {
             String memberQuery = (String) requestBody.get('MemberQuery');
             Integer fastpassVehicleId = (Integer.valueOf(requestBody.get('FastpassVehicleId')));
             String chatId = (String) requestBody.get('ChatId');
+            System.debug('chatId ===> '+ chatId);
             String portalType = (String) requestBody.get('PortalType');
 
             List<String> blankFields = new List<String>();
@@ -677,6 +707,15 @@ global with sharing class FastPassIntegrationService {
                     wrapper.success = new SuccesWrapper();
                 sendErrorEmail('failed to process defaultMemberMessage.', 'No matching Vehicle found for the provided Fastpass Vehicle Id.<br/>Request Type: Default Member Message<br/>VIN: '+vehicleVIN+'<br/>Vehicle Name: '+vehicleName+'<br/>LoanId: '+memberLoanId);
                 return wrapper;
+            }
+            else{
+                if(chatId != null && chatId != ''){
+                    Garage__c newGarage = new Garage__c();
+                    newGarage.Id = garage.Id; 
+                    newGarage.Chat_Id__c = chatId;
+                    update newGarage;
+                }
+                
             }
 
             Portal_Message__c  portalMessage = new Portal_Message__c();
@@ -758,9 +797,9 @@ global with sharing class FastPassIntegrationService {
                 portalMessage.Is_Pending__c = false;
             }
             else if(opp.Branch__c != null && opp.Branch__r.ParentId != null){
-                List<Contact> msrContactList =[SELECT Id
-                                              FROM Contact 
-                                              WHERE Primary_Contact__c = true AND AccountId =: opp.Branch__r.ParentId];
+                List<AccountContactRelation> msrContactList =[SELECT Id
+                                              FROM AccountContactRelation 
+                                              WHERE Contact.Primary_Contact__c = true AND AccountId =: opp.Branch__r.ParentId];
                 portalMessage.Is_Pending__c = msrContactList.size() > 0? false :true;
             }
             else{
@@ -911,12 +950,60 @@ global with sharing class FastPassIntegrationService {
         }
         
     }
-    public static CreateResponseWrapper processTopFiveList(Map<String, Object> requestBody){
-        CreateResponseWrapper wrapper = new CreateResponseWrapper();
-        try{
-            String memberLoanId = (String) requestBody.get('LoanId');
-            String processType = (String) requestBody.get('ProcessType');
-            Integer fastpassVehicleId = (Integer.valueOf(requestBody.get('FastpassVehicleId')));
+
+    // Process the request for top list 
+    public static string processTopFiveList(List<Map<String, Object>> requestBodyList){
+        System.debug('Inside processTopFiveList2');
+        ResponseWrapper responseWrapper = new ResponseWrapper();
+        List<Map<String, String>> successList = new  List<Map<String, String>>();
+        List<Map<String, String>> errorList = new  List<Map<String, String>>();
+        Set<String> oppLoanIdSet = new Set<String>();
+        Set<Integer> fastpassVehicleIdSet = new Set<Integer>();
+        Map<String,List<Decimal>> oppVehicleIdMap = new Map<String,List<Decimal>>();
+        Set<String> isOppPresentSet = new Set<String>();
+        List<Garage__c> garageListToUpdate = new List<Garage__c>();
+        Map<String,String> garageIdMap = new Map<String,String>();
+        Set<String> addedGarageRecords = new Set<String>();
+
+        for(Map<String, Object> each : requestBodyList){
+            String memberLoanId = (String) each.get('LoanId');
+            Integer fastpassVehicleId = (Integer.valueOf(each.get('FastpassVehicleId')));
+            if (!(String.isBlank(memberLoanId)) && fastpassVehicleId != null) {
+                oppLoanIdSet.add(memberLoanId);
+                fastpassVehicleIdSet.add(fastpassVehicleId);
+            }
+        }
+        System.debug('oppLoanIdSet ==>'+ oppLoanIdSet);
+        System.debug('fastpassVehicleIdSet ==>'+ fastpassVehicleIdSet);
+        if(oppLoanIdSet.size() > 0 && fastpassVehicleIdSet.size() > 0){
+
+            List<Opportunity> opportunityList = [SELECT Id, Card_Number__c FROM Opportunity WHERE Card_Number__c in: oppLoanIdSet];
+            for(Opportunity eachOpp : opportunityList){
+                isOppPresentSet.add(eachOpp.Card_Number__c);
+            }
+            System.debug('opportunityList ==>'+ opportunityList);
+            List<Garage__c> garageList = [SELECT Id, FastPass_Vehicle_Id__c, Opportunity__r.Card_Number__c FROM Garage__c WHERE FastPass_Vehicle_Id__c in: fastpassVehicleIdSet AND Opportunity__r.Card_Number__c in: oppLoanIdSet];
+            for(Garage__c eachGarage : garageList){
+                garageIdMap.put(eachGarage.Opportunity__r.Card_Number__c + '-'+ eachGarage.FastPass_Vehicle_Id__c, eachGarage.Id);
+               if(oppVehicleIdMap.containsKey(eachGarage.Opportunity__r.Card_Number__c)){
+                (oppVehicleIdMap.get(eachGarage.Opportunity__r.Card_Number__c)).add(eachGarage.FastPass_Vehicle_Id__c);
+               }
+               else{
+                oppVehicleIdMap.put(eachGarage.Opportunity__r.Card_Number__c,(new List<Decimal>{eachGarage.FastPass_Vehicle_Id__c}));
+               } 
+            }   
+            System.debug('garageList ==>'+ garageList);
+            System.debug('oppVehicleIdMap ==>'+ oppVehicleIdMap);
+        }
+
+
+       
+        for(Map<String, Object> each : requestBodyList){
+
+            String memberLoanId = (String) each.get('LoanId');
+            String processType = (String) each.get('ProcessType');
+            Integer fastpassVehicleId = (Integer.valueOf(each.get('FastpassVehicleId')));
+            String requestType = (String) each.get('RequestType');
             List<String> blankFields = new List<String>();
 
             if (String.isBlank(memberLoanId)) {
@@ -928,60 +1015,107 @@ global with sharing class FastPassIntegrationService {
             if (fastpassVehicleId == null){
                 blankFields.add('FastpassVehicleId');
             }
+            if (String.isBlank(requestType)){
+                blankFields.add('RequestType');
+            }
             if (!blankFields.isEmpty()) {
                 String nullFields = String.join(blankFields, ', ');
-                wrapper.error = new Map<String, String>{
-                    'Error' => 'Required fields are missing: ' + nullFields
+                Map<String, String> errorMessage = new Map<String, String>{
+                    'LoanId' => memberLoanId,
+                    'FastpassVehicleId' => String.valueOf(fastpassVehicleId),
+                    'Message' => 'Required fields are missing: ' + nullFields
                         };
-                sendErrorEmail('failed to process processTopFiveList.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Top Five List');
-                return wrapper;
+                        errorList.add(errorMessage);
+                
             }
-            if(processType != 'add' && processType != 'remove'){
-                wrapper.error = new Map<String, String>{
-                    'Error' => 'Invalid ProcessType: ' + processType
+            else if(processType != 'add' && processType != 'remove'){
+                Map<String, String> errorMessage = new Map<String, String>{
+                    'LoanId' => memberLoanId,
+                    'FastpassVehicleId' => String.valueOf(fastpassVehicleId),
+                    'Message' => 'Invalid ProcessType: ' + processType
                         };
-                sendErrorEmail('failed to process processTopFiveList.', 'Invalid ProcessType: ' + processType+'<br/>Request Type: Top Five List');
-                return wrapper;
+                        errorList.add(errorMessage);
             }
-
-            Opportunity opp = getOpportunity(memberLoanId);
-
-            if (opp == null) {
-                wrapper.error = new Map<String, String>{'Message' => 'No matching opportunity found for the provided LoanId'};
-                sendErrorEmail('failed to process processTopFiveList.', 'No matching opportunity found for the provided LoanId.<br/>Request Type: Top Five List<br/>LoanId: '+memberLoanId);
-                return wrapper;
+            else if(requestType != 'topFiveList' ){
+                Map<String, String> errorMessage = new Map<String, String>{
+                    'LoanId' => memberLoanId,
+                    'FastpassVehicleId' => String.valueOf(fastpassVehicleId),
+                    'Message' => 'Invalid RequestType: ' + requestType
+                        };
+                        errorList.add(errorMessage);
             }
+            else if(isOppPresentSet.contains(memberLoanId)){
+                System.debug('Condition 1 ==>'+ oppVehicleIdMap.containsKey(memberLoanId));
+                if(oppVehicleIdMap.containsKey(memberLoanId)){
+                    System.debug('Condition 2 ==>'+ (oppVehicleIdMap.get(memberLoanId)).contains(fastpassVehicleId));
+                    System.debug('Condition 2.1 ==>'+ (oppVehicleIdMap.get(memberLoanId)));
+                    System.debug('Condition 2.2 ==>'+ fastpassVehicleId);
+                    System.debug('Condition 2.3 ==>'+ ((oppVehicleIdMap.get(memberLoanId))[0] == (Decimal)(fastpassVehicleId)) );
+                    if((oppVehicleIdMap.get(memberLoanId)).contains((Decimal)fastpassVehicleId)){
+                        if(garageIdMap.containsKey(memberLoanId+ '-' + fastpassVehicleId)){
+                            if(!(addedGarageRecords.contains(garageIdMap.get(memberLoanId+ '-' + fastpassVehicleId)))){
+                                Garage__c updateGarage = new Garage__c();
+                                updateGarage.Id = garageIdMap.get(memberLoanId+ '-' + fastpassVehicleId);
+                                updateGarage.Is_Vehicle_In_Top_List__c = processType == 'add'? True: False;
+                                garageListToUpdate.add(updateGarage);
+                                Map<String, String> errorMessage = new Map<String, String>{
+                                    'LoanId' => memberLoanId,
+                                    'FastpassVehicleId' => String.valueOf(fastpassVehicleId),
+                                    'Message' => processType == 'add' ? 'Vehicle added to Top 5 List.': 'Vehicle removed from Top 5 List.'
+                                        }; 
+                                        successList.add(errorMessage);
+                                        addedGarageRecords.add(garageIdMap.get(memberLoanId+ '-' + fastpassVehicleId));
+                            }
+                            
+                        }
+                        else{
+                            Map<String, String> errorMessage = new Map<String, String>{
+                                'LoanId' => memberLoanId,
+                                'FastpassVehicleId' => String.valueOf(fastpassVehicleId),
+                                'Message' => 'Somthing went wrong'
+                                    };
+                                    errorList.add(errorMessage);
+                        }
+                            
+                    }
+                    else{
+                        Map<String, String> errorMessage = new Map<String, String>{
+                            'LoanId' => memberLoanId,
+                            'FastpassVehicleId' => String.valueOf(fastpassVehicleId),
+                            'Message' => 'No matching Vehicle found for the provided Fastpass Vehicle Id.' 
+                                };
+                                errorList.add(errorMessage);
+                    }
+                }
+                else{
+                    Map<String, String> errorMessage = new Map<String, String>{
+                        'LoanId' => memberLoanId,
+                        'FastpassVehicleId' => String.valueOf(fastpassVehicleId),
+                        'Message' => 'No matching Vehicle found for the provided FastpassVehicleId.' 
+                            };
+                            errorList.add(errorMessage);
+                }
 
-            List<Garage__c> garageList = [SELECT Id, Name, VIN__c, FastPass_Vehicle_Id__c, Chat_Id__c, Dealer_Email_Available__c from Garage__c WHERE FastPass_Vehicle_Id__c =: fastpassVehicleId AND Opportunity__c =: opp.Id ];
-            Garage__c garage = garageList.size() > 0 ? garageList[0] : null; 
-            if (garage == null) {
-                wrapper.error = new Map<String, String>{'Message' => 'No matching Vehicle found for the provided Fastpass Vehicle Id'};
-                wrapper.success = new SuccesWrapper();
-                sendErrorEmail('failed to process processTopFiveList.', 'No matching Vehicle found for the provided Fastpass Vehicle Id.<br/>Request Type: Top Five List<br/>LoanId: '+memberLoanId);
-                return wrapper;
             }
             else{
-                Garage__c updateGarage = new Garage__c();
-                updateGarage.Id = garage.Id;
-                updateGarage.Is_Vehicle_In_Top_List__c = processType == 'add'? True: False;
-                update updateGarage;
-
-                String message = processType == 'add' ? 'Vehicle added to Top 5 List': 'Vehicle removed from Top 5 List';
-
-                SuccesWrapper wrapp = new SuccesWrapper();
-                wrapp.message = message;
-                wrapp.data = new List<CreateResponseWrapperSuccess>();
-                wrapper.success = wrapp;
-                wrapper.error = new Map<String, String>{};
+                Map<String, String> errorMessage = new Map<String, String>{
+                    'LoanId' => memberLoanId,
+                    'FastpassVehicleId' => String.valueOf(fastpassVehicleId),
+                    'Message' => 'No matching opportunity found for the provided LoanId.' 
+                        };
+                        errorList.add(errorMessage);
             }
 
         }
-        catch(Exception e){
-            String errorMessage = e.getTypeName() + ': ' + e.getMessage() + ' Line: ' + e.getLineNumber();
-            System.debug('errorMessage :: '+ errorMessage);
+        if(garageListToUpdate.size() > 0){
+            update garageListToUpdate;
         }
-        return wrapper;
+        System.debug('Inside successList ==>'+ successList);
+        System.debug('Inside errorList ==>'+ errorList );
+        return  JSON.serialize(new Map<String, List<Map<String, String>>>{ 'error' => errorList, 'success' => successList});
     }
+
+
 
     public static Opportunity getOpportunity(String memberLoanId){
         List<Opportunity> oppList = [SELECT Id, Name, Branch__c, Branch__r.ParentId, Card_Number__c, Auto_Shopper__r.Email, Bank_Service_Rep_Name_MSR__c

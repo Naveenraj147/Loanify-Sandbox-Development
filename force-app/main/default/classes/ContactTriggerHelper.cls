@@ -32,11 +32,12 @@ public void processPortalMessages(List<Contact> newContactList){
     Set<Id> dealerAccIds = new Set<Id>();
     String msrRecordTypeId = Schema.SObjectType.Contact.getRecordTypeInfosByName().get('Bank Service Rep').getRecordTypeId();
     String dealerProRecordTypeId = Schema.getGlobalDescribe().get('Contact').getDescribe().getRecordTypeInfosByDeveloperName().get('Auto_Dealer_Pro').getRecordTypeId();
-    for (Contact con : newContactList) {
-        if(con.RecordTypeId == msrRecordTypeId && con.AccountId != null){
+    List<AccountContactRelation> accConRelation = [SELECT Id, Contact.RecordTypeId, Contact.Active__c, Contact.Member_Response_Notification__c, AccountId From AccountContactRelation WHERE ContactId =: newContactList];
+    for (AccountContactRelation con : accConRelation) {
+        if(con.Contact.RecordTypeId == msrRecordTypeId && con.AccountId != null){
             accIds.add(con.AccountId);
         }
-        if(con.RecordTypeId == dealerProRecordTypeId && con.Active__c == true && con.Member_Response_Notification__c == true ){
+        if(con.Contact.RecordTypeId == dealerProRecordTypeId && con.Contact.Active__c == true && con.Contact.Member_Response_Notification__c == true ){
             dealerAccIds.add(con.AccountId);
         }
     }
@@ -78,6 +79,7 @@ public void processPMforContactUpdate(List<Contact> newContactList, Map<Id,Conta
     List<Contact> updatedContactWithCriteria = new List<Contact>();
     Set<Id> accIds = new Set<Id>();
     Set<Id> appDownloadedMembers = new Set<Id>();
+    String autoShopperRecordTypeId = Schema.getGlobalDescribe().get('Contact').getDescribe().getRecordTypeInfosByDeveloperName().get('Auto_Shopper').getRecordTypeId();
     for(Contact con : newContactList){
         if(con.Active__c == true  && con.Member_Response_Notification__c == true && (oldContactMap.get(con.Id).Active__c != con.Active__c || oldContactMap.get(con.Id).Member_Response_Notification__c != con.Member_Response_Notification__c )){
             updatedContactWithCriteria.add(con);
@@ -85,7 +87,7 @@ public void processPMforContactUpdate(List<Contact> newContactList, Map<Id,Conta
         else if((con.Active__c == false && oldContactMap.get(con.Id).Active__c != con.Active__c) || (con.Member_Response_Notification__c == false && oldContactMap.get(con.Id).Member_Response_Notification__c != con.Member_Response_Notification__c)){
             accIds.add(con.AccountId);
         }
-        if(con.App_Downloaded__c != null && con.App_Downloaded__c != oldContactMap.get(con.Id).App_Downloaded__c ){
+        if(con.App_Downloaded__c != null && con.App_Downloaded__c != oldContactMap.get(con.Id).App_Downloaded__c && con.RecordTypeId == autoShopperRecordTypeId ){
             appDownloadedMembers.add(con.Id);
         }
     }
@@ -98,14 +100,17 @@ public void processPMforContactUpdate(List<Contact> newContactList, Map<Id,Conta
     }
     System.Debug('accIds.size() ===> '+accIds.size());
     if(accIds.size() > 0){
-        Map<Id, Account> accMap = new Map<Id, Account> ([SELECT Id, Manager_Email__c, (SELECT Id FROM Contacts WHERE Active__c = true AND Member_Response_Notification__c = true) FROM Account WHERE Id =: accIds]);
+        Map<Id, Account> accMap = new Map<Id, Account> ([SELECT Id, Manager_Email__c, (SELECT Id FROM AccountContactRelations WHERE Contact.Active__c = true AND Contact.Member_Response_Notification__c = true) FROM Account WHERE Id =: accIds]);
         List<Garage__c> garList = [SELECT Id, Dealer_Email_Available__c, Dealer__c FROM Garage__c WHERE Dealer__c =: accIds AND Dealer_Email_Available__c = true];
         List<Garage__c> garListToUpdate = new List<Garage__c>();
         System.Debug('accMap ===> '+accMap.size());
         System.Debug('garList ===> '+garList.size());
         if(garList.size() > 0){
             for(Garage__c gar : garList){
-                if(accMap.containsKey(gar.Dealer__c)  && accMap.get(gar.Dealer__c).contacts.size() == 0){ 
+                System.Debug('Condition 1 ===> '+ accMap.containsKey(gar.Dealer__c));
+                System.Debug('Condition 2 ===> '+ (accMap.get(gar.Dealer__c).AccountContactRelations.size() == 0));
+                System.Debug('Condition 2 ===> '+ (accMap.get(gar.Dealer__c).AccountContactRelations.size()));
+                if(accMap.containsKey(gar.Dealer__c)  && accMap.get(gar.Dealer__c).AccountContactRelations.size() == 0){ 
                     Garage__c newGarage = new Garage__c();
                     newGarage.Id = gar.Id;
                     newGarage.Dealer_Email_Available__c = false;

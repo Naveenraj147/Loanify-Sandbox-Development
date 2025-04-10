@@ -8,6 +8,8 @@ public class LeadTriggerHelper {
             Id recordTypeIdCUContact = Schema.getGlobalDescribe().get('Contact').getDescribe().getRecordTypeInfosByDeveloperName().get('Bank_Service_Rep').getRecordTypeId();
             set<Id> leadIds = new set<Id> ();
             set<Id> convertedLeadIds = new set<Id> ();
+            //Collect converted AccountId with LeadId
+            Map<Id, Lead> convertedLeadIdWithId = new Map<Id, Lead> ();
             Map<Id, List<String>>  dealerIdToDealerProsEmailMap = new Map<Id, List<String>> ();
             Map<Id, List<String>>  dealerIdToDealerProsPhoneMap = new Map<Id, List<String>> ();
             List<Contact> newContactsList = new List<Contact>();
@@ -50,6 +52,7 @@ public class LeadTriggerHelper {
                     }
                     if(each.IsConverted == true && each.IsConverted != oldLead.IsConverted){
                         convertedLeadIds.add(each.Id);
+                        convertedLeadIdWithId.put(each.Id, each);
                         
                         if(each.RecordTypeId  == recordTypeId){
                             if(each.Dealer_Pro_1_Email__c != null && each.Dealer_Pro_1_Name__c != null){
@@ -180,12 +183,16 @@ public class LeadTriggerHelper {
                     Map<String, Object> objMap = new Map<String, Object>();
                     objMap.put('Id', each);
                     objMap.put('IsConverted', true);
-                    ConvertedLeadJsonList.add(JSON.serialize(objMap));
+                    //Check accountId is present or not
+                    if(convertedLeadIdWithId.containsKey(each) && convertedLeadIdWithId.get(each).FastPass_Dealer_Id__c != null){
+                        objMap.put('Converted_Sf_Uid', convertedLeadIdWithId.get(each).ConvertedAccountId);
+                        objMap.put('FastPass_Dealer_Id__c', convertedLeadIdWithId.get(each).FastPass_Dealer_Id__c);
+                    }
+                   // ConvertedLeadJsonList.add(JSON.serialize(objMap));
+                   ConvertedLeadJsonList.add(AzureIntegrationService.serializeWithNulls(convertedLeadIdWithId.get(each)));
                 }
                 if(ConvertedLeadJsonList.size() > 0){
-                    System.debug('Inside Azure call');
                     AzureIntegrationService.updateDataInAzure(ConvertedLeadJsonList);
-                    System.debug('Inside Azure call was done');
                 }
 
             }

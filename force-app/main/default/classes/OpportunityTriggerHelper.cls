@@ -84,5 +84,57 @@ public class OpportunityTriggerHelper {
             }
         }
     }
+    public static void restrictNonRelatedMSR(List<Opportunity> newOppList, Map<Id, Opportunity> oldMap) {
+        // Set to store unique Branch IDs from the Opportunity records
+        Set<String> branchIds = new Set<String>();
+    
+        // Map to store the relationship between Branches (AccountId) and their associated MSRs (ContactId)
+        Map<String, List<String>> accConRelationMap = new Map<String, List<String>>();
+    
+        // Extract Branch IDs from new Opportunities
+        for (Opportunity opp : newOppList) {
+            if (opp.Branch__c != null) {
+                branchIds.add(opp.Branch__c);
+            }
+        }
+    
+        // Fetch the Account-Contact relationships where the AccountId (Branch) is in the collected Branch IDs
+        List<AccountContactRelation> accConRelationList = [
+            SELECT Id, AccountId, ContactId 
+            FROM AccountContactRelation 
+            WHERE AccountId IN :branchIds
+        ];
+    
+        // Populate the accConRelationMap with Branch (AccountId) as the key and a list of related MSRs (ContactId) as the value
+        for (AccountContactRelation each : accConRelationList) {
+            if (accConRelationMap.containsKey(each.AccountId)) {
+                accConRelationMap.get(each.AccountId).add(each.ContactId);
+            } else {
+                accConRelationMap.put(each.AccountId, new List<String>{each.ContactId});
+            }
+        }
+    
+        // Iterate through new Opportunities to apply validation rules
+        for (Opportunity opp : newOppList) {
+            // Retrieve old Opportunity record before update (if applicable)
+            Opportunity oldOpp = oldMap != null ? oldMap.get(opp.Id) : null;
+    
+            // Validation 1: If MSR is selected but no Branch is chosen, show an error
+            if (opp.Branch__c == null && opp.Bank_Service_Rep_Name_MSR__c != null) {
+                opp.addError('Please select Branch.');
+            }
+            // Validation 2: If MSR is changed or newly selected, check if it is related to the Branch
+            else if (opp.Branch__c != null && opp.Bank_Service_Rep_Name_MSR__c != null &&  
+                     (oldOpp == null || opp.Bank_Service_Rep_Name_MSR__c != oldOpp.Bank_Service_Rep_Name_MSR__c)) {
+                
+                // Check if the Branch exists in the relationship map and whether the MSR is associated with it
+                if (!accConRelationMap.containsKey(opp.Branch__c) || 
+                    (accConRelationMap.containsKey(opp.Branch__c) && 
+                     !(accConRelationMap.get(opp.Branch__c)).contains(opp.Bank_Service_Rep_Name_MSR__c))) {
+                    opp.addError('This MSR is not related to the Branch selected. Please select another MSR and try again.');
+                }
+            }
+        }
+    }    
 
 }
