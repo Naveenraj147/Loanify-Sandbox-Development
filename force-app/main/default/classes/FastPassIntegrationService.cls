@@ -60,11 +60,14 @@ global with sharing class FastPassIntegrationService {
                     break;
 
                 }
+                else if (requestType == 'updateDownPayment') {
+                    jsonResponse = updateDownPayment(requestBody);
+                }
                 else {
                     wrapper.error = new Map<String, String>{'Message' => 'Could not find a match for RequestType'};
                     sendErrorEmail('Failed to ' + requestType, JSON.serialize(wrapper.error));
                 }
-                if (!(requestType == 'topFiveList')){
+                if (!(requestType == 'topFiveList' || requestType == 'updateDownPayment' )){
                     System.debug('Inside responseList adding ==> '+ jsonResponse);
                     responseList.add(wrapper);
                 }
@@ -86,16 +89,18 @@ global with sharing class FastPassIntegrationService {
             System.debug('Exception:' + errorMessage);
             sendErrorEmail('failed to process request', errorMessage);
             responseList.add(wrapper);
-            RestResponse res = new RestResponse();
-            RestContext.response = res;
+            // RestResponse res = new RestResponse();
+            // RestContext.response = res;
             RestContext.response.statusCode = 500;
             jsonResponse = JSON.serialize(responseList);
-            
+            RestContext.response.responseBody = Blob.valueOf(jsonResponse);
+            System.debug('Exception:' + jsonResponse);
             //return responseList;
         }
         RestContext.response.addHeader('Content-Type', 'application/json');
         if(jsonResponse != null){
             RestContext.response.responseBody = Blob.valueOf(jsonResponse);
+            System.debug('Exception:' + jsonResponse);
         }
        
     }
@@ -137,7 +142,7 @@ global with sharing class FastPassIntegrationService {
                     'Error' => 'Required fields are missing: ' + nullFields
                         };
                             wrapper.success = new SuccesWrapper();
-                sendErrorEmail('Failed to process vehicleAddition', 'Required fields are missing: '+nullFields +'<br/> Request Type: vehicleAdditionToGarage');
+                sendErrorEmail('Failed to process vehicleAddition', 'Required fields are missing: '+nullFields +'<br/> Request Type: vehicleAdditionToGarage'+ (String.isBlank(memberLoanId)?'':'<br/> Card Number: '+ memberLoanId ));
                 return wrapper;
             }
             
@@ -302,7 +307,7 @@ global with sharing class FastPassIntegrationService {
                     'Error' => 'Required fields are missing: ' + nullFields
                         };
                             wrapper.success = new SuccesWrapper();
-                sendErrorEmail('Failed to process vehicleRemoval', 'Required fields are missing: '+nullFields+'<br/>Request Type: vehicleRemovalInGarage');
+                sendErrorEmail('Failed to process vehicleRemoval', 'Required fields are missing: '+nullFields+'<br/>Request Type: vehicleRemovalInGarage'+(String.isBlank(memberLoanId)?'':'<br/> Card Number: '+ memberLoanId ));
                 return wrapper;
             }
             
@@ -325,7 +330,7 @@ global with sharing class FastPassIntegrationService {
                 else{
                     wrapper.error = new Map<String, String>{'Message' => 'No matching vehicle is found in the garage.'};
                         wrapper.success = new SuccesWrapper();
-                    sendErrorEmail('failed to process vehicleRemovalInGarage.', 'No matching vehicle is found in the garage. <br/>Request Type: vehicleRemovalInGarage<br/> FastpassVehicleId: '+fastpassVehicleId+'<br/>Opportunity Id: '+opp.Id);  
+                    //sendErrorEmail('failed to process vehicleRemovalInGarage.', 'No matching vehicle is found in the garage. <br/>Request Type: vehicleRemovalInGarage<br/> FastpassVehicleId: '+fastpassVehicleId+'<br/>Opportunity Id: '+opp.Id);  
                 }
             }
             else{
@@ -521,7 +526,6 @@ global with sharing class FastPassIntegrationService {
             String memberQuery = (String) requestBody.get('MemberQuery');
             Integer fastpassVehicleId = (Integer.valueOf(requestBody.get('FastpassVehicleId')));
             String chatId = (String) requestBody.get('ChatId');
-
             List<String> blankFields = new List<String>();
             List<Contact> conList =  new List<Contact>();
             List<Lead> leadList =  new List<Lead>();
@@ -551,7 +555,7 @@ global with sharing class FastPassIntegrationService {
                     'Error' => 'Required fields are missing: ' + nullFields
                         };
                             wrapper.success = new SuccesWrapper();
-                sendErrorEmail('failed to process requestForAskDealer.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Ask Dealer Request');
+                sendErrorEmail('failed to process requestForAskDealer.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Ask Dealer Request'+(String.isBlank(memberLoanId)?'':'<br/> Card Number: '+ memberLoanId ));
                 return wrapper;
             }
             
@@ -600,16 +604,17 @@ global with sharing class FastPassIntegrationService {
             portalMessage.Is_Pending__c = !garage.Dealer_Email_Available__c;
             portalMessage.Sender_Email__c = opp.Auto_Shopper__r.Email;
             portalMessage.Message_Sent_Date_Time__c = System.Now();
+            Garage__c updateGarage = new Garage__c();
             if(testDriveDateTime != null){
                 portalMessage.Request_Type__c = 'Test_Drive';
+                DateTime testDriveDT = DateTime.valueOf(testDriveDateTime);
+                updateGarage.Scheduled_Test_Drive_Datetime__c = testDriveDT;
             }
             insert portalMessage;
             String dealerName = acc!= null? acc.Name : lead != null? lead.Company : '';
             String body = '🏬 '+ dealerName + ' \n 🚘 '+ garage.Name; 
             String title = 'New message from '+ (opp.Auto_Shopper__r.FirstName);
             FastPassIntegrationService.sendNotification(title, body, garage.Id, null);
-
-            Garage__c updateGarage = new Garage__c();
             updateGarage.Id = garage.Id;
             updateGarage.Last_Member_Response_Test_Drive__c = System.now();
             if(garage.Send_Generic_Notification__c == true){
@@ -684,7 +689,7 @@ global with sharing class FastPassIntegrationService {
                     'Error' => 'Required fields are missing: ' + nullFields
                         };
                             wrapper.success = new SuccesWrapper();
-                sendErrorEmail('failed to process defaultMemberMessage.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Ask Dealer Request');
+                sendErrorEmail('failed to process defaultMemberMessage.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Ask Dealer Request'+ (String.isBlank(memberLoanId)?'':'<br/> Card Number: '+ memberLoanId ));
                 return wrapper;
             }
 
@@ -705,7 +710,7 @@ global with sharing class FastPassIntegrationService {
             if (garage == null) {
                 wrapper.error = new Map<String, String>{'Message' => 'No matching Vehicle found for the provided Fastpass Vehicle Id'};
                     wrapper.success = new SuccesWrapper();
-                sendErrorEmail('failed to process defaultMemberMessage.', 'No matching Vehicle found for the provided Fastpass Vehicle Id.<br/>Request Type: Default Member Message<br/>VIN: '+vehicleVIN+'<br/>Vehicle Name: '+vehicleName+'<br/>LoanId: '+memberLoanId);
+                sendErrorEmail('failed to process defaultMemberMessage.', 'No matching Vehicle found for the provided Fastpass Vehicle Id.<br/>Request Type: Default Member Message<br/>VIN: '+vehicleVIN+'<br/>Vehicle Name: '+vehicleName+'<br/>LoanId: '+memberLoanId+'<br/>OpportunityId: '+opp.Id);
                 return wrapper;
             }
             else{
@@ -770,7 +775,7 @@ global with sharing class FastPassIntegrationService {
                     'Error' => 'Required fields are missing: ' + nullFields
                         };
                           //  wrapper.success = new SuccesWrapper();
-                sendErrorEmail('failed to process requestMSRMessage.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Ask MSR Request');
+                sendErrorEmail('failed to process requestMSRMessage.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Ask MSR Request'+(String.isBlank(memberLoanId)?'':'<br/> Card Number: '+ memberLoanId ));
                 return wrapper;
             }
             List<Opportunity> oppList = [SELECT Id, Name, Branch__c, Branch__r.ParentId, Card_Number__c, Auto_Shopper__r.Email, Bank_Service_Rep_Name_MSR__c
@@ -863,7 +868,7 @@ global with sharing class FastPassIntegrationService {
                     'Message' => 'Required fields are missing: ' + nullFields
                         };
                             wrapper.success = new SuccesWrapper();
-                sendErrorEmail('failed to process requestTestDriveResponse.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Test Drive Response');
+                sendErrorEmail('failed to process requestTestDriveResponse.', 'Required fields are missing: '+nullFields+'<br/>Request Type: Test Drive Response'+(String.isBlank(memberLoanId)?'':'<br/> Card Number: '+ memberLoanId ));
                 return wrapper;
             }
             Integer index = (PageNumber - 1) * 50;
@@ -1115,6 +1120,46 @@ global with sharing class FastPassIntegrationService {
         return  JSON.serialize(new Map<String, List<Map<String, String>>>{ 'error' => errorList, 'success' => successList});
     }
 
+    public static string updateDownPayment(Map<String, Object> requestBody){
+        Map<String, String> successList = new Map<String, String>();
+        Map<String, String> errorList = new Map<String, String>();
+        String memberLoanId = (String) requestBody.get('LoanId');
+        Double downPayment = (Double) requestBody.get('DownPayment');
+        Opportunity opp = getOpportunity(memberLoanId);
+
+        List<String> blankFields  = new List<String> ();
+            if (String.isBlank(memberLoanId)){
+                blankFields.add('LoanId');
+            }
+            if (downPayment == null){
+                blankFields.add('DownPayment');
+            }
+
+        if (!blankFields.isEmpty()) {
+            String nullFields = String.join(blankFields, ', ');
+            errorList = new Map<String, String>{
+                'Message' => 'Required fields are missing: ' + nullFields
+                    };
+        }
+        else if(opp == null){
+            errorList = new Map<String, String>{
+                'LoanId' => memberLoanId,
+                'Message' => 'No matching opportunity found for the provided LoanId.' 
+                    };
+        }
+        else{
+            Opportunity oppUpdate = new Opportunity();
+            oppUpdate.Id = opp.Id;
+            oppUpdate.Down_Payment__c = downPayment;
+            update oppUpdate;
+            successList = new Map<String, String>{
+                'LoanId' => memberLoanId,
+                'Message' => 'The down payment has been updated successfully.' 
+                    };
+        }
+        return  JSON.serialize((new Map<String, Map<String, String>>{ 'error' => errorList, 'success' => successList}));
+
+    }
 
 
     public static Opportunity getOpportunity(String memberLoanId){

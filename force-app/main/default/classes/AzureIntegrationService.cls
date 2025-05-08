@@ -60,7 +60,7 @@ global without sharing class AzureIntegrationService {
             }
             
             List<Database.SaveResult> results = Database.insert(accList, false);
-            DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results);
+            DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results, accList);
             Set<Id> successIds = resultsWrapper.successIds;
             if(errorData.isEmpty()){
                 errorData = resultsWrapper.error;
@@ -148,12 +148,14 @@ global without sharing class AzureIntegrationService {
         // Inserting the Contact records
         if(!newConList.isEmpty()){
             List<Database.SaveResult> results = Database.insert(newConList, false);
-            DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results);
+            DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results, newConList);
             Set<Id> successIds = resultsWrapper.successIds;
             if(errorData.isEmpty()){
                 errorData = resultsWrapper.error;
             }else if(!resultsWrapper.error.isEmpty()){
+                System.debug('Error Data#1 ==>'+ resultsWrapper.error);
                 for(String error : resultsWrapper.error.keySet()){
+                    System.debug('Error Data#2 ==>'+ error);
                     if(errorData.containsKey(error)){
                         String temp = errorData.get(error);
                         if(temp!=resultsWrapper.error.get(error))
@@ -250,7 +252,7 @@ global without sharing class AzureIntegrationService {
                             
                     }else{
                         if(String.isNotBlank(each.Bank_Service_Rep_Name_MSR__c) ){
-                            msrNullTable += '<tr><td>' + branchName + '-' + each.Branch__c + '</td><td>' + each.Bank_Service_Rep_Name_MSR__c + '</td><td>' + 'NA' +'</td></tr>';
+                            msrNullTable += '<tr><td>' + each.Card_Number__c + '</td><td>' + branchName + '-' + each.Branch__c + '</td><td>' + each.Bank_Service_Rep_Name_MSR__c + '</td><td>' + 'NA' +'</td></tr>';
                             sendNullEmail = true;
                         }
                         each.Bank_Service_Rep_Name_MSR__c = null;
@@ -263,7 +265,7 @@ global without sharing class AzureIntegrationService {
                 
             }
             List<Database.SaveResult> results = Database.insert(oppList, false);
-            DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results);
+            DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results, oppList);
             Set<Id> successIds = resultsWrapper.successIds;
             if(errorData.isEmpty()){
                 errorData = resultsWrapper.error;
@@ -316,7 +318,7 @@ global without sharing class AzureIntegrationService {
             }
             
             List<Database.SaveResult> results = Database.insert(leadList, false);
-            DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results);
+            DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results, leadList);
             Set<Id> successIds = resultsWrapper.successIds;
             if(errorData.isEmpty()){
                 errorData = resultsWrapper.error;
@@ -485,7 +487,7 @@ global without sharing class AzureIntegrationService {
                     }
                     Database.update(accValUpdateList, false);
 
-                    DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results);
+                    DatabaseSaveResultsWrapper resultsWrapper = processDatabaseSaveResults(results, accValUpdateList);
                     Set<Id> successIds = resultsWrapper.successIds;
                     if(errorData.isEmpty()){
                         errorData = resultsWrapper.error;
@@ -666,15 +668,27 @@ global without sharing class AzureIntegrationService {
         return wrapper;
     }
 
-    public static DatabaseSaveResultsWrapper processDatabaseSaveResults(List<Database.SaveResult> results){
+    public static DatabaseSaveResultsWrapper processDatabaseSaveResults(List<Database.SaveResult> results, List<SObject> objList){
         DatabaseSaveResultsWrapper wrapper = new DatabaseSaveResultsWrapper();
         Map<String,String> errorData = new Map<String,String>();
         Set<Id> successIds = new Set<Id>();
+        Integer count = 0;
         for (Database.SaveResult result : results) {
             if (!result.isSuccess()) {   
+                System.debug('Error Result ==>' + result);
+                String name;
+                if(objList[count].get('Name') != null){
+                    name = (string)objList[count].get('Name');
+                }
+                else if(objList[count].get('FirstName') != null || objList[count].get('LastName') != null ){
+                    name = ((string)objList[count].get('FirstName') != null?  (string)objList[count].get('FirstName') : '') + ' ' + (string)objList[count].get('LastName') != null? (string)objList[count].get('LastName'):'' ;
+                }
+
+                System.debug('Error Name ==>' + name);
                 String error='';
                 for(Database.Error each : result.getErrors()) {
-                    error = each.getMessage() + (each.getFields()!=null ? ' Fields: ' + each.getFields() : '') +';';   
+                    System.debug('Error Details ==>' + each);
+                    error = each.getMessage() + (each.getFields()!=null ? ' Fields: ' + each.getFields() : '') +(name !=null ? ', Name: ' + name : '') +';';   
                     if(errorData.containsKey(each.getStatusCode()+'')){
                         String temp = errorData.get(each.getStatusCode()+'');
                         if(temp!=error)
@@ -688,6 +702,7 @@ global without sharing class AzureIntegrationService {
                 successIds.add(result.getId());
             }
             System.debug('Result:'+result);
+            count++;
         }
         wrapper.error = errorData;
         wrapper.successIds = successIds;
@@ -729,12 +744,6 @@ global without sharing class AzureIntegrationService {
         
         List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
         Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
-        
-        /*List<EmailTemplate> template = [SELECT DeveloperName, Id, Subject, HtmlValue, Body FROM EmailTemplate Where DeveloperName = 'Exception_Email_Template'];
-String templateSubject = template[0].Subject;
-templateSubject = templateSubject.replace('{reason}', subjectReason);
-String body = template[0].HtmlValue;
-body = body.replace('{exceptionMessage}', exceptionMessage);*/
         
         String subject = 'AzureIntegrationService - '+subjectReason;
         String body = 'Following exception has occurred in AzureIntegrationService.<br/><br/> Exception:'+exceptionMessage+'<br/><br/>Regards,<br/>Admin';
@@ -848,10 +857,6 @@ body = body.replace('{exceptionMessage}', exceptionMessage);*/
                                     data.put('F_I_Manager_Cell_Phone__c', fIManagerCellPhone);
                                 }   
                             } 
-                            // if(isConverted == true){
-                            //     data.put('IsConverted', true);
-                            // }
-                            
                             
                             String sObjName = recordId.getSObjectType().getDescribe().getName();
                             String endpointUrl;
@@ -887,6 +892,12 @@ body = body.replace('{exceptionMessage}', exceptionMessage);*/
                                 }
                             }
                             else if (sObjName == 'Lead'){
+                                if(isConverted == true){
+                                    data.put('Converted_Sf_Uid', data.get('ConvertedAccountId'));
+                                    data.put('Dealer_Id__c', data.get('Dealer_ID__c'));
+                                    data.put('BillingLongitude', data.get('Longitude'));
+                                    data.put('BillingLatitude', data.get('Latitude'));
+                                }
                                 
                                 List<Lead> leadList = [SELECT Id, Company, RecordType.DeveloperName FROM Lead WHERE Id =: sfId LIMIT 1];
                                 if(leadList.size() > 0){

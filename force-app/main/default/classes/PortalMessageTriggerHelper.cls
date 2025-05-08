@@ -15,16 +15,20 @@ public class PortalMessageTriggerHelper {
 
         set <String> firstSMSIds = new set<String>();
         for(Portal_Message__c pm: newList){
+            //Member message for dealer
             if(pm.Is_Pending__c != true && pm.Is_Member_Message__c == true && (pm.Portal_Type__c == 'Dealer'|| pm.Portal_Type__c == 'Carbots') ){
                 pmIds.add(pm.Id);
             }
+            //Member message for MSR
             else if(pm.Is_Pending__c != true && pm.Is_Member_Message__c == true && pm.Portal_Type__c == 'MSR'){
                 pmMSRIds.add(pm.Id);
                 System.debug('Inside MSR Update');
             }
+            //MSR message for Member
             else if( pm.Is_Member_Message__c == false && pm.Portal_Type__c == 'MSR'){
                 pmMSRMessageIds.add(pm.Id);
             }
+            //Dealer Message for Member
             else if( pm.Is_Member_Message__c == false && (pm.Portal_Type__c == 'Dealer'|| pm.Portal_Type__c == 'Carbots')){
                 pmCBMessageIds.add(pm.Id);
             }
@@ -34,7 +38,7 @@ public class PortalMessageTriggerHelper {
         orgWideEmailId = orgWideEmail != null? orgWideEmail.Id : null;
 
         if(pmIds.size() > 0){
-            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Message__c, garage__r.FastPass_Vehicle_Id__c, Garage__r.Dealer__c, Garage__r.Lead_Dealer__c, garage__r.FastPass_Dealer_Id__c, garage__r.VIN__c, garage__r.Name,Opportunity__r.Card_Number__c, Request_Type__c, garage__r.Stock_Number__c, Portal_Type__c
+            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Message__c, garage__r.FastPass_Vehicle_Id__c, Garage__r.Dealer__c, Garage__r.Lead_Dealer__c, garage__r.FastPass_Dealer_Id__c, garage__r.VIN__c, garage__r.Name,Opportunity__r.Card_Number__c, Request_Type__c, garage__r.Stock_Number__c, Portal_Type__c, Garage__r.Dealer__r.Name, Garage__r.Lead_Dealer__r.Name
                                                 FROM Portal_Message__c
                                                 WHERE Id IN:pmIds];
             if(pmList.size() > 0){
@@ -46,10 +50,10 @@ public class PortalMessageTriggerHelper {
                 EmailTemplate rightSwipEmailTemp;
                 tdc_tsw__Message_Template__c smsTemplate;
 
-                // List<tdc_tsw__Message_Template__c> smsTemplateList = [SELECT Id, tdc_tsw__SMSBodyNew__c FROM tdc_tsw__Message_Template__c WHERE Name = 'Right_Swipe_Automation_SMS' Limit 1];
-                // if(smsTemplateList.size() > 0){
-                //     smsTemplate = smsTemplateList[0];
-                // }
+                List<tdc_tsw__Message_Template__c> smsTemplateList = [SELECT Id, tdc_tsw__SMSBodyNew__c FROM tdc_tsw__Message_Template__c WHERE Name = 'Right_Swipe_Automation_SMS' Limit 1];
+                if(smsTemplateList.size() > 0){
+                    smsTemplate = smsTemplateList[0];
+                }
 
                 for (EmailTemplate template : emailTemplates) {
                     if (template.DeveloperName == 'Member_Query_For_Test_Drive_1719900621424') {
@@ -79,7 +83,7 @@ public class PortalMessageTriggerHelper {
                 }
                 accountMap = new Map<Id, Account>([SELECT Id, Name, Manager_Email__c, Manager_Name__c,Manager_Cell_Phone__c FROM Account WHERE Id IN: dealerIds]);
                 LeadMap = new Map<Id, Lead>([SELECT Id, Name, Company, Manager_Email__c, Manager_Name__c, Manager_Cell_Phone__c, Dealer_Pro_1_Email__c, Dealer_Pro_2_Email__c, Dealer_Pro_3_Email__c, Dealer_pro_1_Phone__c, Dealer_pro_2_Phone__c, Dealer_pro_3_Phone__c FROM Lead WHERE Id IN: leadDealerIds]);
-                List<AccountContactRelation> activeContacts = [SELECT AccountId, ContactId, Contact.Email, Contact.Phone, Contact.MobilePhone FROM AccountContactRelation WHERE AccountId In :dealerIds AND Contact.Email!= null AND Contact.Active__c = true AND Contact.Member_Response_Notification__c = true ];  
+                List<AccountContactRelation> activeContacts = [SELECT AccountId, ContactId, Contact.Email, Contact.Member_Email_Notifications__c, Contact.Member_SMS_Notifications__c,  Contact.Phone, Contact.MobilePhone FROM AccountContactRelation WHERE AccountId In :dealerIds AND Contact.Email!= null AND Contact.Active__c = true AND Contact.Member_Response_Notification__c = true ];  
                 Map<Id, List<String>> emailMap = new Map<Id, List<String>>();
                 List<String> smsPhoneList = new List<String>();
                 
@@ -88,8 +92,11 @@ public class PortalMessageTriggerHelper {
                         emailMap.put(con.AccountId, new List<String>());
                         dealerIdToDealerProsPhoneMap.put(con.AccountId, new List<String>());
                     }
-                    emailMap.get(con.AccountId).add(con.Contact.Email);
-                    if(con.Contact.Phone != null || con.Contact.MobilePhone != null){
+                    if(con.Contact.Member_Email_Notifications__c != true){
+                        emailMap.get(con.AccountId).add(con.Contact.Email);
+                    }
+                   
+                    if((con.Contact.Phone != null || con.Contact.MobilePhone != null) && con.Contact.Member_SMS_Notifications__c == false){
                         dealerIdToDealerProsPhoneMap.get(con.AccountId).add(con.Contact.Phone!=null? con.Contact.Phone: con.Contact.MobilePhone );
                     }
                     
@@ -193,7 +200,7 @@ public class PortalMessageTriggerHelper {
                     }
 
 
-                    if( toAdress.size() > 0  ){
+                    if( toAdress.size() > 0 || (protalMessage.Request_Type__c == 'First_Message' && dealerIdToDealerProsPhoneMap.size() > 0) ){
                         email.setWhatId(protalMessage.garage__c);
                         Map<String, Object> params = new Map<String, Object>();
                         params.put('opportunityId', protalMessage.Opportunity__c);
@@ -242,7 +249,18 @@ public class PortalMessageTriggerHelper {
                                 htmlBody = htmlBody.replace ('click here', '<a href="' +conLink+ '">click here</a>');
                                 memberQuery = memberQuery.replaceAll('\n', '<br/>');
                                 htmlBody = htmlBody.replace('{{{MemberQuery}}}', memberQuery);
-                                String body = '🏬 '+ ('test Company ')+ ' \n 🚘 '+ protalMessage.garage__r.Name; 
+                                String body;
+                                if(protalMessage.Garage__r.Dealer__c != null){
+                                    body = '🏬 '+ String.valueOf(protalMessage.garage__r.Dealer__r.Name)+ ' \n 🚘 '+ protalMessage.garage__r.Name; 
+                                    htmlBody = htmlBody.replace('{{{Recipient.Id}}}', protalMessage.Garage__r.Dealer__c);
+                                }
+                                else if(protalMessage.Garage__r.Lead_Dealer__c != null){
+                                    body = '🏬 '+ String.valueOf(protalMessage.garage__r.Lead_Dealer__r.Name) + ' \n 🚘 '+ protalMessage.garage__r.Name; 
+                                }
+                                else{
+                                    body = '🏬 '+ ' \n 🚘 '+ protalMessage.garage__r.Name;
+                                }
+                               // String body = '🏬 '+ ('test Company ')+ ' \n 🚘 '+ protalMessage.garage__r.Name; 
                                 String title = 'New message from '+ (protalMessage.Opportunity__r.Name);
                                 FastPassIntegrationService.sendNotification(title, body, protalMessage.garage__c, null);
                         }
@@ -253,8 +271,12 @@ public class PortalMessageTriggerHelper {
                             String memberQuery = protalMessage.Message__c.replaceAll('\n', '<br/>');
                             htmlBody = htmlBody.replace('{firstMessage}', memberQuery);
                             htmlBody = htmlBody.replace('{Link}', '<a href="' +conLink+ '">click here</a>');
-                          //  String messageText = smsTemplateList.size()>0 ? smsTemplateList[0].tdc_tsw__SMSBodyNew__c : null;
-                          String messageText = null;
+                            String messageText = smsTemplateList.size()>0 ? smsTemplateList[0].tdc_tsw__SMSBodyNew__c : null;
+                            if(protalMessage.Garage__r.Dealer__c != null){
+                                htmlBody = htmlBody.replace('{{{Recipient.Id}}}', protalMessage.Garage__r.Dealer__c);
+                            }
+                            
+                          
                           if(messageText != null){
                                 system.debug('Inside messageText ===>' );
                                 messageText = messageText.replace('{firstMessage}', MemberQuery);
@@ -264,7 +286,7 @@ public class PortalMessageTriggerHelper {
                                     system.debug('Inside Dealer Check ===>' );
                                     for(String each : dealerIdToDealerProsPhoneMap.get(dealerId)){
                                         system.debug('Inside SMS sending ===>' );
-                                      //  tdc_tsw.GlobalSMSSender.SendSmsWithPhoneNumberAndMessageText(each,messageText,protalMessage.garage__c) ;
+                                        tdc_tsw.GlobalSMSSender.SendSmsWithPhoneNumberAndMessageText(each,messageText,protalMessage.garage__c) ;
                                      }
                                 }
                             }
@@ -283,9 +305,21 @@ public class PortalMessageTriggerHelper {
                             String memberQuery = protalMessage.Message__c.replaceAll('\n', '<br/>');
                             htmlBody = htmlBody.replace('{{{MemberResponse}}}', memberQuery  );
                             htmlBody = htmlBody.replace ('click here', '<a href="' +conLink+ '">click here</a>');
-                            String body = '🏬 '+ ('test Company ')+ ' \n 🚘 '+ protalMessage.garage__r.Name; 
+                            String body;
+                            if(protalMessage.Garage__r.Dealer__c != null){
+                                body = '🏬 '+ String.valueOf(protalMessage.garage__r.Dealer__r.Name)+ ' \n 🚘 '+ protalMessage.garage__r.Name; 
+                                htmlBody = htmlBody.replace('{{{Recipient.Id}}}', protalMessage.Garage__r.Dealer__c);
+                            }
+                            else if(protalMessage.Garage__r.Lead_Dealer__c != null){
+                                body = '🏬 '+ String.valueOf(protalMessage.garage__r.Lead_Dealer__r.Name) + ' \n 🚘 '+ protalMessage.garage__r.Name; 
+                            }
+                            else{
+                                body = '🏬 '+ ' \n 🚘 '+ protalMessage.garage__r.Name;
+                            }
+                             
                             String title = 'New message from '+ (protalMessage.Opportunity__r.Name);
                             FastPassIntegrationService.sendNotification(title, body, protalMessage.garage__c, null);
+                           
                             
                         }
                         if(toAdress.size() > 0){
@@ -296,7 +330,6 @@ public class PortalMessageTriggerHelper {
                         else{
                             email.setToAddresses(ccAdress);
                         }
-                        //email.setToAddresses(new List<String> { 'naveen.raj@winfomi.com' });
                         email.setSubject(subject);
                         email.setHtmlBody(htmlBody);
                         email.setSaveAsActivity(true); 
@@ -304,7 +337,10 @@ public class PortalMessageTriggerHelper {
                         if(orgWideEmailId != null){
                             email.setOrgWideEmailAddressId(orgWideEmailId);
                         }
-                        emailList.add(email);
+                        if(email.getToAddresses() != null && email.getToAddresses().size() > 0){
+                            emailList.add(email);
+                        }
+                      
 
                     }
                 }
@@ -343,7 +379,7 @@ public class PortalMessageTriggerHelper {
                 
             } 
             if(ParrentAccountIds.size() > 0 || contactIds.size() > 0){
-                Map<Id, AccountContactRelation> contactMap = new Map<Id, AccountContactRelation>([SELECT Id, Contact.Name, Contact.Email, AccountId  FROM AccountContactRelation WHERE (AccountId IN: ParrentAccountIds AND Contact.Primary_Contact__c = true) OR ContactId IN: contactIds]);
+                Map<Id, AccountContactRelation> contactMap = new Map<Id, AccountContactRelation>([SELECT Id, Contact.Name, Contact.Email, Contact.Member_Email_Notifications__c, AccountId  FROM AccountContactRelation WHERE (AccountId IN: ParrentAccountIds AND Contact.Primary_Contact__c = true) OR ContactId IN: contactIds]);
                 Map<Id, String> contactNameMap = new Map<Id, String>();
                 Map<Id, String> msrEmailMap = new Map<Id, String>();
                 Map<Id, List<String>> accountEmailMap =  new Map<Id, List<String>>();
@@ -362,7 +398,10 @@ public class PortalMessageTriggerHelper {
                             accountEmailMap.get(con.AccountId).add(con.Contact.Email);
                         }
                         contactNameMap.put(con.ContactId, con.Contact.Name);
-                        msrEmailMap.put(con.ContactId, con.Contact.Email );
+                        if(con.Contact.Member_Email_Notifications__c == false){
+                            msrEmailMap.put(con.ContactId, con.Contact.Email );
+                        }
+                       
 
                     }
                     // List<EmailTemplate> emailTemplates = [SELECT Id, Name, Subject, HtmlValue, DeveloperName 
@@ -403,6 +442,8 @@ public class PortalMessageTriggerHelper {
                             }
                             subject = subject.contains('{{{Opportunity.Name}}}')? subject.replace('{{{Opportunity.Name}}}', eachPM.Opportunity__r.Name): subject;
                             htmlBody = htmlBody.replace('{{{Opportunity.Auto_Shopper__c}}}',eachPM.Opportunity__r.Auto_Shopper__r.Name);
+                            htmlBody = htmlBody.replace('{{{Opportunity.Bank_Service_Rep_Name_MSR__r.Id}}}',eachPM.Opportunity__r.Bank_Service_Rep_Name_MSR__c);
+
                             email.setSubject(subject);
                             email.setHtmlBody(htmlBody);
                             email.setUseSignature(false);
@@ -423,7 +464,7 @@ public class PortalMessageTriggerHelper {
         if(pmMSRMessageIds.size() > 0){
             List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
             
-            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Opportunity__r.Mobile__c, Opportunity__r.Phone__c, Message__c,Opportunity__c, Opportunity__r.Auto_Shopper__c, Opportunity__r.Branch__c, Opportunity__r.Branch__r.Name, Opportunity__r.Auto_Shopper__r.FirstName, Opportunity__r.Auto_Shopper__r.Name, Opportunity__r.Auto_Shopper__r.Email
+            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Opportunity__r.Mobile__c, Opportunity__r.Phone__c, Message__c,Opportunity__c, Opportunity__r.Auto_Shopper__c, Opportunity__r.Branch__c, Opportunity__r.Credit_Union_Email_Notifications__c, Opportunity__r.Branch__r.Name, Opportunity__r.Auto_Shopper__r.FirstName, Opportunity__r.Auto_Shopper__r.Name, Opportunity__r.Auto_Shopper__r.Email
                                                 FROM Portal_Message__c
                                                 WHERE Id IN:pmMSRMessageIds];
             List<EmailTemplate> template = [SELECT Id, DeveloperName, Subject, HtmlValue FROM EmailTemplate WHERE DeveloperName = 'Member_Notification_for_MSR_Message' LIMIT 1];
@@ -431,7 +472,7 @@ public class PortalMessageTriggerHelper {
             if(pmList.size() > 0 && template.size() > 0){
                 for(Portal_Message__c eachPM : pmList){
                     EmailTemplate temp = template[0]; 
-                    if(eachPM.Opportunity__r.Auto_Shopper__r.Email != null){
+                    if(eachPM.Opportunity__r.Auto_Shopper__r.Email != null && eachPM.Opportunity__r.Credit_Union_Email_Notifications__c == false ){
                        emailList.add(createMembernotificationFromMSR(eachPM, temp));
                     }
                     if(eachPM.Opportunity__r.Mobile__c != null || eachPM.Opportunity__r.Phone__c != null){
@@ -446,17 +487,18 @@ public class PortalMessageTriggerHelper {
         if(pmCBMessageIds.size() > 0){
             List<Messaging.SingleEmailMessage> emailList = new List<Messaging.SingleEmailMessage>();
             List<EmailTemplate> template = [SELECT Id, DeveloperName FROM EmailTemplate WHERE DeveloperName = 'Email_Notification_to_Member' LIMIT 1];
-            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Message__c,Opportunity__c, Opportunity__r.Auto_Shopper__c, Garage__c, Opportunity__r.Auto_Shopper__r.Name, Garage__r.Send_Generic_Notification__c, Garage__r.Is_Vehicle_In_Top_List__c, Opportunity__r.Auto_Shopper__r.Email
+            List<Portal_Message__c> pmList = [SELECT Id, Name, Opportunity__r.Name, Message__c,Opportunity__c, Opportunity__r.Auto_Shopper__c, Garage__c, Opportunity__r.Auto_Shopper__r.Name, Garage__r.Send_Generic_Notification__c, Garage__r.Is_Vehicle_In_Top_List__c, Opportunity__r.Auto_Shopper__r.Email, Opportunity__r.Dealer_Email_Notifications__c
                                                 FROM Portal_Message__c
                                                 WHERE Id IN:pmCBMessageIds]; 
             EmailTemplate emailTemp = template.size() > 0? template[0] : null; 
                 if(pmList.size() > 0 && emailTemp != null){
                     for(Portal_Message__c eachPM : pmList){
-                        if(eachPM.Opportunity__r.Auto_Shopper__r.Email != null && eachPM.Garage__r.Send_Generic_Notification__c != true && eachPM.Garage__r.Is_Vehicle_In_Top_List__c == true){ 
+                        if(eachPM.Opportunity__r.Auto_Shopper__r.Email != null && eachPM.Garage__r.Send_Generic_Notification__c != true && eachPM.Garage__r.Is_Vehicle_In_Top_List__c == true && eachPM.Opportunity__r.Dealer_Email_Notifications__c == false){ 
                             Messaging.SingleEmailMessage emailTempRender = Messaging.renderStoredEmailTemplate(emailTemp.Id, null, eachPM.Garage__c);
                             Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
                             String subject = emailTempRender.getSubject(); 
                             String htmlBody = emailTempRender.getHtmlBody();
+                            htmlBody = htmlBody.replace('{Opportunity_Id}', eachPM.Opportunity__c);
                             emailList.add(createEmail(subject, htmlBody,new List<String>{eachPM.Opportunity__r.Auto_Shopper__r.Email}, null, eachPM.garage__c ));
                         }
                     }
@@ -475,6 +517,7 @@ public class PortalMessageTriggerHelper {
         String htmlBody = template.HtmlValue;
         htmlBody = portaMessage.Opportunity__r.Branch__c !=null?  htmlBody.replace('{{{CreditUnionName}}}', portaMessage.Opportunity__r.Branch__r.Name): htmlBody.replace('{{{CreditUnionName}}}','' );
         htmlBody = portaMessage.Opportunity__r.Auto_Shopper__r.FirstName != null? htmlBody.replace('{{{Member_FirstName}}}', portaMessage.Opportunity__r.Auto_Shopper__r.FirstName) : htmlBody.replace('{{{Member_FirstName}}}', portaMessage.Opportunity__r.Auto_Shopper__r.Name);
+        htmlBody = portaMessage.Opportunity__c != null? htmlBody.replace('{{{Opportunity.Id}}}', portaMessage.Opportunity__c) : htmlBody.replace('{{{Opportunity.Id}}}', '');
         return createEmail(subject,  htmlBody, new List<String>{portaMessage.Opportunity__r.Auto_Shopper__r.Email},null, portaMessage.Opportunity__c );
     }
 

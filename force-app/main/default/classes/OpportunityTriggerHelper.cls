@@ -20,7 +20,7 @@ public class OpportunityTriggerHelper {
                         if(oldMap == null){
                             tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId(smsField, smsTemplate.Id, eachOpp.Id);
                         }
-                        else if((eachOpp.Phone__c == null && eachOpp.Mobile__c != null && oldMap.get(eachOpp.Id).Mobile__c == null) || (eachOpp.Mobile__c == null && eachOpp.Phone__c != null && oldMap.get(eachOpp.Id).Phone__c == null) ){
+                        else if((eachOpp.Phone__c == null && eachOpp.Mobile__c != null && oldMap.get(eachOpp.Id).Mobile__c == null) || (eachOpp.Mobile__c == null && eachOpp.Phone__c != null && oldMap.get(eachOpp.Id).Phone__c == null ) && eachOpp.FastPass_Team_SMS_Support__c == false ){
                             tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId(smsField, smsTemplate.Id, eachOpp.Id);
                         }
                     }
@@ -32,18 +32,20 @@ public class OpportunityTriggerHelper {
             
             if(msrUpdatedOppIds.size() > 0 && emailTemplate != null){
                 String dealerportalURL = system.label.Dealer_Portal_Page_URL;
-                for(Opportunity eachOpp : [SELECT Id, Bank_Service_Rep_Name_MSR__r.Email FROM Opportunity WHERE Id =:msrUpdatedOppIds AND Bank_Service_Rep_Name_MSR__r.Email != null] ){
-                    Messaging.SingleEmailMessage emailTempRender = Messaging.renderStoredEmailTemplate(emailTemplate.Id, null, eachOpp.Id);
-                    Map<String, Object> params = new Map<String, Object>();
-                    params.put('opportunityId', eachOpp.Id);
-                    params.put('portalType', 'MSR');
-                    params.put('linkSharedDate', Date.today());
-                    // Convert to JSON string
-                    String jsonParams = JSON.serialize(params);
-                    String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
-                    String htmlBody = emailTempRender.getHtmlBody();
-                    htmlBody = htmlBody.replace ('click here', '<a href="' +conLink+ '">click here</a>');
-                    Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+                for(Opportunity eachOpp : [SELECT Id, Bank_Service_Rep_Name_MSR__r.Email, Bank_Service_Rep_Name_MSR__r.FastPass_Team_Email_Support__c  FROM Opportunity WHERE Id =:msrUpdatedOppIds AND Bank_Service_Rep_Name_MSR__r.Email != null] ){
+                    if(eachOpp.Bank_Service_Rep_Name_MSR__r.FastPass_Team_Email_Support__c == false &&  eachOpp.Bank_Service_Rep_Name_MSR__r.Email != null ){
+                        Messaging.SingleEmailMessage emailTempRender = Messaging.renderStoredEmailTemplate(emailTemplate.Id, null, eachOpp.Id);
+                        Map<String, Object> params = new Map<String, Object>();
+                        params.put('opportunityId', eachOpp.Id);
+                        params.put('portalType', 'MSR');
+                        params.put('linkSharedDate', Date.today());
+                        // Convert to JSON string
+                        String jsonParams = JSON.serialize(params);
+                        String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
+                        String htmlBody = emailTempRender.getHtmlBody();
+                        htmlBody = htmlBody.replace ('click here', '<a href="' +conLink+ '">click here</a>');
+                        htmlBody = htmlBody.replace ('{Bank_Service_Rep_Name_MSR_Id}', eachOpp.Bank_Service_Rep_Name_MSR__c);
+                        Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
                         // Set the recipient (to address)
                         List<String> toAddresses = new List<String> {eachOpp.Bank_Service_Rep_Name_MSR__r.Email};
                         email.setToAddresses(toAddresses);
@@ -52,6 +54,8 @@ public class OpportunityTriggerHelper {
                         email.setOrgWideEmailAddressId(orgWideEmailId);
                         email.setWhatId(eachOpp.Id);
                         emailList.add(email);
+                    }
+                    
                 }
                 if(emailList.size() > 0){
                     Messaging.sendEmail(emailList);

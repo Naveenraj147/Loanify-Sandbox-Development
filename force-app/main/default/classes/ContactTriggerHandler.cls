@@ -33,6 +33,7 @@ public class ContactTriggerHandler {
     
     public void onAfterInsert(){
         helper.processPortalMessages(newList);
+        helper.syncDataInAzure(newMap, null);
     }
     
     public void onBeforeUpdate(){
@@ -49,39 +50,11 @@ public class ContactTriggerHandler {
     }
     
     public void onAfterUpdate(){
-        
-      
         helper.processPMforContactUpdate(newList, oldMap);
-        
-        System.debug('Insert Contact On After Method');
-        List<Contact> conList = [select Id,Name,MobilePhone,Phone,RecordTypeId,RecordType.DeveloperName from Contact where Id in: newList];
-        System.debug('ConList Size::'+ conList.Size());
-        List<String> serializedDataList = new List<String> ();
-        
-        for(Contact each : conList){
-            if ( each.RecordType.DeveloperName == 'Bank_Service_Rep' || each.RecordType.DeveloperName == 'Auto_Dealer_Pro'){
-                String serializedData =AzureIntegrationService.serializeWithNulls(newMap.get(each.Id)); 
-                serializedDataList.add(serializedData);
-            }else if (each.RecordType.DeveloperName == 'Auto_Shopper' && oldMap.get(each.Id).MobilePhone != each.MobilePhone || oldMap.get(each.Id).Phone != each.Phone){
-                String serializedData = serializePhoneField(each.MobilePhone, each.Phone, each.Id); 
-                serializedDataList.add(serializedData);
-            }
-            
-        }
-        if(!serializedDataList.isEmpty()){
-            System.debug('serializedDataList Size::'+ serializedDataList.Size());
-            AzureIntegrationService.updateDataInAzure(serializedDataList);
-        }
+        helper.syncDataInAzure(newMap, oldMap);
     }
     
-    private String serializePhoneField(String MobilePhone, string Phone, String Id) {
-        Map<String, Object> phoneMap = new Map<String, Object>();
-        phoneMap.put('Id', Id);
-        phoneMap.put('MobilePhone', MobilePhone);
-        phonemap.put('Phone', Phone);
-        
-        return JSON.serialize(phoneMap);
-    }
+    
     
     
     public void onBeforeDelete(){

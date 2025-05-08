@@ -180,16 +180,10 @@ public class LeadTriggerHelper {
                 
               List<String> ConvertedLeadJsonList = new List<String>();
                 for(Id each:convertedLeadIds ){
-                    Map<String, Object> objMap = new Map<String, Object>();
-                    objMap.put('Id', each);
-                    objMap.put('IsConverted', true);
-                    //Check accountId is present or not
-                    if(convertedLeadIdWithId.containsKey(each) && convertedLeadIdWithId.get(each).FastPass_Dealer_Id__c != null){
-                        objMap.put('Converted_Sf_Uid', convertedLeadIdWithId.get(each).ConvertedAccountId);
-                        objMap.put('FastPass_Dealer_Id__c', convertedLeadIdWithId.get(each).FastPass_Dealer_Id__c);
+                    //Check Converterd Lead is Dealer RecordType
+                    if(convertedLeadIdWithId.containsKey(each) && convertedLeadIdWithId.get(each).RecordTypeId == recordTypeId){
+                        ConvertedLeadJsonList.add(AzureIntegrationService.serializeWithNulls(convertedLeadIdWithId.get(each)));
                     }
-                   // ConvertedLeadJsonList.add(JSON.serialize(objMap));
-                   ConvertedLeadJsonList.add(AzureIntegrationService.serializeWithNulls(convertedLeadIdWithId.get(each)));
                 }
                 if(ConvertedLeadJsonList.size() > 0){
                     AzureIntegrationService.updateDataInAzure(ConvertedLeadJsonList);

@@ -157,6 +157,8 @@ public void sendSMSandEmail(Set<Id> contactList){
                 String conLink = dealerportalURL+'?q='+CryptoUtility.encrypt(jsonParams);
                 String htmlBody = emailTempRender.getHtmlBody();
                 htmlBody = htmlBody.replace ('click here', '<a href="' +conLink+ '">click here</a>');
+                htmlBody = htmlBody.replace ('{Bank_Service_Rep_Name_MSR_Id}', eachOpp.Bank_Service_Rep_Name_MSR__c);
+
                 Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
                     // Set the recipient (to address)
                     List<String> toAddresses = new List<String> {eachOpp.Bank_Service_Rep_Name_MSR__r.Email};
@@ -183,6 +185,36 @@ public void sendSMSandEmail(Set<Id> contactList){
         Messaging.sendEmail(emailList);
     }
 
+}
+
+public void syncDataInAzure(Map<Id,Contact> newContactMap, Map<Id,Contact> oldContactMap){
+    List<Contact> conList = [select Id,Name,MobilePhone,Phone,RecordTypeId,RecordType.DeveloperName from Contact where Id in: newContactMap.keySet()];
+        System.debug('ConList Size::'+ conList.Size());
+        List<String> serializedDataList = new List<String> ();
+        
+        for(Contact each : conList){
+            if ( each.RecordType.DeveloperName == 'Bank_Service_Rep' || each.RecordType.DeveloperName == 'Auto_Dealer_Pro'){
+                String serializedData =AzureIntegrationService.serializeWithNulls(newContactMap.get(each.Id)); 
+                serializedDataList.add(serializedData);
+            }else if (each.RecordType.DeveloperName == 'Auto_Shopper' && oldContactMap != null && (oldContactMap.get(each.Id).MobilePhone != each.MobilePhone || oldContactMap.get(each.Id).Phone != each.Phone)){
+                String serializedData = serializePhoneField(each.MobilePhone, each.Phone, each.Id); 
+                serializedDataList.add(serializedData);
+            }
+            
+        }
+        if(!serializedDataList.isEmpty()){
+            System.debug('serializedDataList Size::'+ serializedDataList.Size());
+            AzureIntegrationService.updateDataInAzure(serializedDataList);
+        }
+}
+
+private String serializePhoneField(String MobilePhone, string Phone, String Id) {
+    Map<String, Object> phoneMap = new Map<String, Object>();
+    phoneMap.put('Id', Id);
+    phoneMap.put('MobilePhone', MobilePhone);
+    phonemap.put('Phone', Phone);
+    
+    return JSON.serialize(phoneMap);
 }
 
 
