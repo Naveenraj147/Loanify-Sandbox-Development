@@ -33,80 +33,91 @@ global class ChatPortalController {
     public String advertisedPrice { get; set; }
     public Boolean isDealerAllowedToSendMessage { get; set; }
     public Boolean isMemberView { get; set; }
+    public Boolean isUnsubscribe { get; set; }
 
     public ChatPortalController() {
         try {
-        newMessage='';
-        opportunityId= opportunityId !=null? opportunityId : '';
-        portalType= portalType!= null ? portalType:'';
-
-        // Decrypt and assign the parameters from the URL
-        Map<String, String> params = ApexPages.currentPage().getParameters();
-        recordId = recordId!= null ? recordId:params.get('id'); 
-        System.debug('RecordId:'+recordId);
-        String encryptedParams = params.get('q');
-        portalType = params.get('portalType');
-        Date linkGeneratedDate;
-        if(Test.isRunningTest()){
-            opportunityId =  params.get('opportunityId'); 
-            dealerId =  params.get('dealerId');
-        }
-        showInputBox = true;
-       
-        if(encryptedParams != null){
-            String decryptedParams = CryptoUtility.decrypt(encryptedParams);
-            Map<string,Object> paramMapping=(Map<string,Object> )JSON.deserializeUntyped(decryptedParams);
-            opportunityId = (String)paramMapping.get('opportunityId');
-            String dateString = (String)paramMapping.get('linkSharedDate');
-            linkGeneratedDate = Date.valueOf(dateString);
-            portalType = (String)paramMapping.get('portalType');
-            String type = (String)paramMapping.get('type');
-            if(type != null && type == 'testDrive'){
-                portalType = 'Dealer';
+            newMessage='';
+            opportunityId= opportunityId !=null? opportunityId : '';
+            portalType= portalType!= null ? portalType:'';
+            isUnsubscribe = false;
+            // Decrypt and assign the parameters from the URL
+            Map<String, String> params = ApexPages.currentPage().getParameters();
+            recordId = recordId!= null ? recordId:params.get('id'); 
+            System.debug('RecordId:'+recordId);
+            String encryptedParams = params.get('q');
+            String view = params.get('view');
+			String recId = params.get('recId');
+            System.debug('view ==> '+ view);
+            portalType = params.get('portalType');
+            Date linkGeneratedDate;
+            if(Test.isRunningTest()){
+                opportunityId =  params.get('opportunityId'); 
+                dealerId =  params.get('dealerId');
             }
-            if(portalType == 'Dealer' || portalType == 'Carbots'){
-                dealerId = (String)paramMapping.get('dealerId');
-                vehicleVin = (String)paramMapping.get('vehicleVin');
-                vehicleName = (String)paramMapping.get('vehicleName');
-                fastpassDealerId = Integer.valueOf(paramMapping.get('fastpassVehicleId'));
-                garageId = (String)paramMapping.get('garageId');
-                stockNumber = (String)paramMapping.get('stockNumber');
-            }           
-            System.debug('convertedDate--> '+ linkGeneratedDate.daysBetween(System.Today()));
-            showComponent = true;
-            
-        }
-        if(recordId != null){
-            sObjName = ((Id)recordId).getSObjectType().getDescribe().getName();
-            showComponent = true;
-            if(sObjName == 'Opportunity'){
-                opportunityId = recordId;
-                portalType = portalType != null? portalType :'MSR';
+            showInputBox = true;
+            if(view == null){
+                
+                if(encryptedParams != null){
+                    String decryptedParams = CryptoUtility.decrypt(encryptedParams);
+                    Map<string,Object> paramMapping=(Map<string,Object> )JSON.deserializeUntyped(decryptedParams);
+                    opportunityId = (String)paramMapping.get('opportunityId');
+                    String dateString = (String)paramMapping.get('linkSharedDate');
+                    linkGeneratedDate = Date.valueOf(dateString);
+                    portalType = (String)paramMapping.get('portalType');
+                    String type = (String)paramMapping.get('type');
+                    if(type != null && type == 'testDrive'){
+                        portalType = 'Dealer';
+                    }
+                    if(portalType == 'Dealer' || portalType == 'Carbots'){
+                        dealerId = (String)paramMapping.get('dealerId');
+                        vehicleVin = (String)paramMapping.get('vehicleVin');
+                        vehicleName = (String)paramMapping.get('vehicleName');
+                        fastpassDealerId = Integer.valueOf(paramMapping.get('fastpassVehicleId'));
+                        garageId = (String)paramMapping.get('garageId');
+                        stockNumber = (String)paramMapping.get('stockNumber');
+                    }           
+                    System.debug('convertedDate--> '+ linkGeneratedDate.daysBetween(System.Today()));
+                    showComponent = true;
+                    
+                }
+                if(recordId != null){
+                    sObjName = ((Id)recordId).getSObjectType().getDescribe().getName();
+                    showComponent = true;
+                    if(sObjName == 'Opportunity'){
+                        opportunityId = recordId;
+                        portalType = portalType != null? portalType :'MSR';
+                    }
+                    if(sObjName == 'Garage__c'){
+                        garageId = recordId;
+                        portalType = 'Dealer';
+                        List<Garage__c> Garage = [SELECT Id, Opportunity__c, Fastpass_Dealer_Id__c FROM Garage__c WHERE Id =:garageId LIMIT 1 ]; 
+                        opportunityId = Garage.size() > 0? Garage[0].Opportunity__c : null;
+                        dealerId = Garage.size() > 0? Garage[0].Fastpass_Dealer_Id__c : null;
+                        
+                    }
+                }
+                if(linkGeneratedDate != null && recordId == null && linkGeneratedDate.daysBetween(System.Today())> 7 ){
+                    showComponent = false;
+                    ApexPages.addmessage(new ApexPages.message(ApexPages.severity.WARNING,'Link Expired'));
+                }
+                if(opportunityId != null && opportunityId != ''){
+                    opportunity = [SELECT Id, Name, Auto_Shopper__r.Name, Auto_Shopper__r.Email, Branch__c, Bank_Service_Rep_Name_MSR__c, Branch__r.ParentId, Auto_Shopper__r.RecordTypeId, Card_Number__c FROM Opportunity where Id=:opportunityId];
+                    memberName =  opportunity != null? opportunity.Auto_Shopper__r.Name:'Member';
+                    memberEmail = opportunity != null? opportunity.Auto_Shopper__r.Email:null;
+                    loadsenderOptions();
+                    loadConversations();
+                }
+                else{
+                    ApexPages.addmessage(new ApexPages.message(ApexPages.severity.WARNING,'Please Contact Your Admin.'));
+                }
             }
-            if(sObjName == 'Garage__c'){
-                garageId = recordId;
-                portalType = 'Dealer';
-                List<Garage__c> Garage = [SELECT Id, Opportunity__c, Fastpass_Dealer_Id__c FROM Garage__c WHERE Id =:garageId LIMIT 1 ]; 
-                opportunityId = Garage.size() > 0? Garage[0].Opportunity__c : null;
-                dealerId = Garage.size() > 0? Garage[0].Fastpass_Dealer_Id__c : null;
-
+            else if(view == 'unsubscribe' && recId != null && isValidId(recId)){
+                isUnsubscribe = true;
             }
-        }
-        if(linkGeneratedDate != null && recordId == null && linkGeneratedDate.daysBetween(System.Today())> 7 ){
-            showComponent = false;
-            ApexPages.addmessage(new ApexPages.message(ApexPages.severity.WARNING,'Link Expired'));
-        }
-        if(opportunityId != null && opportunityId != ''){
-            opportunity = [SELECT Id, Name, Auto_Shopper__r.Name, Auto_Shopper__r.Email, Branch__c, Bank_Service_Rep_Name_MSR__c, Branch__r.ParentId, Auto_Shopper__r.RecordTypeId, Card_Number__c FROM Opportunity where Id=:opportunityId];
-            memberName =  opportunity != null? opportunity.Auto_Shopper__r.Name:'Member';
-            memberEmail = opportunity != null? opportunity.Auto_Shopper__r.Email:null;
-            loadsenderOptions();
-            loadConversations();
-        }
-        else{
-            ApexPages.addmessage(new ApexPages.message(ApexPages.severity.WARNING,'Please Contact Your Admin.'));
-        }
-        
+            else{
+                ApexPages.addmessage(new ApexPages.message(ApexPages.severity.WARNING,'Please Contact Your Admin.'));
+            }
         } 
         catch (Exception e) {
             showComponent = false;
@@ -453,16 +464,21 @@ global class ChatPortalController {
                 //newPM.Sender_Email__c = nameEmailMap.get(selectedSender);
                 String chatLink;
                 if(garageId != null){
-                List<Garage__c> Garage = [SELECT Id, Name, VIN__c, Chat_Id__c, Opportunity__c,Dealer__c, Dealer__r.FastPass_Dealer_Id__c, FastPass_Vehicle_Id__c, Lead_Dealer__c, Lead_Dealer__r.FastPass_Dealer_Id__c, Is_Vehicle_In_Top_List__c	 FROM Garage__c WHERE Id =:garageId ]; 
-                    if(Garage.size() > 0){
+                List<Garage__c> garage = [SELECT Id, Name, VIN__c, Chat_Id__c, Opportunity__c,Dealer__c, Dealer__r.FastPass_Dealer_Id__c, FastPass_Vehicle_Id__c, Lead_Dealer__c, Lead_Dealer__r.FastPass_Dealer_Id__c, Is_Vehicle_In_Top_List__c, Lead_Waiting_Date__c, TD_Scheduled_Date__c	 FROM Garage__c WHERE Id =:garageId ]; 
+                    if(garage.size() > 0){
                         chatLink = Garage[0].Chat_Id__c;
                     
                         Garage__c garageUpdate = new Garage__c();
                         garageUpdate.Id = garageId;
-                        if(memberMsgCount == 1 &&  dealerMsgCount >= 1 && Garage[0].Is_Vehicle_In_Top_List__c	 == true){ 
+                        if(memberMsgCount == 1 &&  dealerMsgCount >= 1 && garage[0].Is_Vehicle_In_Top_List__c	 == true){ 
                             garageUpdate.Send_Generic_Notification__c = true;
                         }
                         garageUpdate.Last_Dealer_Response_Test_Drive__c = System.now();
+                        if(garage[0].Lead_Waiting_Date__c != null && garage[0].TD_Scheduled_Date__c == null){
+                            garageUpdate.TD_Scheduled_Date__c = system.today();
+                            garageUpdate.Status__c = 'TD Scheduled';
+                        }
+
                         Update garageUpdate;
                         if(chatLink != null){
                             callFastPassWebhook(chatLink, null ,'ask_dealer');
@@ -531,14 +547,14 @@ global class ChatPortalController {
             String accessToken = metaSFAPI != null? metaSFAPI.Access_Token__c: null;
             if(metaSFAPI != null && baseUrl != null && accessToken != null){
               //  String flowUrl = baseUrl+ '/services/data/v53.0/actions/custom/flow/Send_SMS_From_Flow';
-                String flowUrl = baseUrl+ '/services/data/v57.0/sobjects/Garage__c/'+recordId;
-                request.setEndpoint(flowUrl);
-                request.setMethod('PATCH');
-                
-                // Set headers if necessary
-                request.setHeader('Content-Type', 'application/json');
-                request.setHeader('Authorization', 'Bearer ' + accessToken);  // If authentication is required
-                
+              String flowUrl = baseUrl+ '/services/data/v57.0/sobjects/Garage__c/'+recordId;
+            request.setEndpoint(flowUrl);
+            request.setMethod('PATCH');
+            
+            // Set headers if necessary
+            request.setHeader('Content-Type', 'application/json');
+            request.setHeader('Authorization', 'Bearer ' + accessToken);  // If authentication is required
+            
             
             
             // Convert to JSON string
@@ -595,7 +611,9 @@ global class ChatPortalController {
                 if (garageId != null) {
                     Garage__c garage = new Garage__c(
                         Id = garageId,
-                        Outdoor_Price__c = outTheDoorPrice
+                        Outdoor_Price__c = outTheDoorPrice,
+                        OTD_Provided_Date__c = system.today(),
+                        Status__c = 'OTD$ Provided'
                     );
                     update garage;
                     System.debug('Updated Garage record with out-the-door price: ' + outTheDoorPrice);
@@ -700,5 +718,14 @@ global class ChatPortalController {
         return '$' + formatted;
     }
     
+    private Boolean isValidId(String recId){
+        try {
+            Id id = Id.valueOf(recId);
+            return true;
+        } 
+		catch (Exception e) {
+            return false;
+        }
+    }
 
 }

@@ -3,12 +3,7 @@
         <div style="text-align: center; margin-top: 20px;">
             <img src={imageUrl} alt="Logo" />
         </div>
-        <div if:true={isError} class="top-banner" style="height:4rem" >
-             Please update any one preference.
-      
-        </div>
-        
-        <div if:false={showSucessMessage} >
+       
         <div class="box-1">
             <div class="heading">Communication Settings</div>
             <div class="sub-heading">Manage how and where you want to receive communications from us</div>
@@ -24,57 +19,42 @@
                     </td>
                     <td>
                         <div class="checkbox">
-                            <input name="Email-All" type="checkbox" checked={checkboxValue.Email.all} onchange={handleOnChange}>
+                            <input name="Email-All" type="checkbox" onchange={handleOnChange}>
                         </div>
                     </td>
                     <td>
                         <div class="checkbox">
-                            <input name="SMS-All" type="checkbox" checked={checkboxValue.SMS.all}  onchange={handleOnChange}> 
+                            <input name="SMS-All" type="checkbox"  onchange={handleOnChange}> 
                         </div>
                     </td>
                 </tr>
-                <tr if:false={isContact}>
+                <tr>
                     <td>
                         Credit Union Notifications
                     </td>
                     <td>
                         <div class="checkbox">
-                            <input name="Email-cun" type="checkbox" checked={checkboxValue.Email.cun} onchange={handleOnChange}>
+                            <input name="Email-CU" type="checkbox" checked={checkboxValue.Email.creditUnionNotifications} onchange={handleOnChange}>
                         </div>
                     </td>
                     <td>
                         <div class="checkbox">
-                            <input name="SMS-cun" type="checkbox" checked={checkboxValue.SMS.cun} onchange={handleOnChange}>
+                            <input name="SMS-CU" type="checkbox" checked={checkboxValue.SMS.creditUnionNotifications} onchange={handleOnChange}>
                         </div>
                     </td>
                 </tr>
-                <tr if:false={isContact}>
+                <tr>
                     <td>
                         Dealer Notifications
                     </td>
                     <td>
                         <div class="checkbox">
-                            <input name="Email-dn" type="checkbox" checked={checkboxValue.Email.dn} onchange={handleOnChange}>
+                            <input name="Email-D" type="checkbox" checked={checkboxValue.Email.dealerNotifications} onchange={handleOnChange}>
                         </div>
                     </td>
                     <td>
                         <div class="checkbox">
-                            <input name="SMS-dn" type="checkbox"  checked={checkboxValue.SMS.dn} onchange={handleOnChange}>
-                        </div>
-                    </td>
-                </tr>
-                <tr if:true={isContact}>
-                    <td>
-                        Member Notifications
-                    </td>
-                    <td>
-                        <div class="checkbox">
-                            <input name="Email-mn" type="checkbox" checked={checkboxValue.Email.mn} onchange={handleOnChange}>
-                        </div>
-                    </td>
-                    <td>
-                        <div class="checkbox">
-                            <input name="SMS-mn" type="checkbox"  checked={checkboxValue.SMS.mn} onchange={handleOnChange}>
+                            <input name="SMS-D" type="checkbox"  checked={checkboxValue.SMS.dealerNotifications} onchange={handleOnChange}>
                         </div>
                     </td>
                 </tr>
@@ -84,47 +64,23 @@
                     </td>
                     <td>
                         <div class="checkbox" >
-                            <input name="Email-fpn" type="checkbox" checked={checkboxValue.Email.fpn}  onchange={handleOnChange}>
+                            <input name="Email-FPT" type="checkbox" checked={checkboxValue.Email.fastpassSuport}  onchange={handleOnChange}>
                         </div>
                     </td>
                     <td>
                         <div class="checkbox">
-                            <input name="SMS-fpn" type="checkbox" checked={checkboxValue.SMS.fpn} onchange={handleOnChange}>
+                            <input name="SMS-FPT" type="checkbox" checked={checkboxValue.SMS.fastpassSuport} onchange={handleOnChange}>
                         </div>
                     </td>
                 </tr>
             </table>
         </div>
-        <div style="text-align: center; margin-top: 20px;">
-            <button class="button" role="button" onclick={handleClick}>Update Preferences</button>
-        </div>
-        </div>
+
     </div>
-    <div  if:true={isLoading} >
-        <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+    <div style="text-align: center; margin-top: 20px;">
+        <button class="button" role="button">Update Preferences</button>
     </div>
-    <div if:true={showSucessMessage}>
-        <div class="box-1">
-            <div class="heading">Thank you for updating the preferences!</div>
-        </div>
-    </div>
-   <!--Pop up-->
-   <template if:true={isModalOpen}>
-        <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
-            <div class="slds-modal__container">
-                <header class="slds-modal__header">
-                    <h2 class="slds-text-heading_medium">Modal Header</h2>
-                </header>
-                <div class="slds-modal__content slds-p-around_medium">
-                    <p>This is a modal popup!</p>
-                </div>
-                <footer class="slds-modal__footer">
-                    <div style="text-align: center; margin-top: 20px;">
-            <button class="button" role="button" onclick={handleClick}>Submit</button>
-        </div>
-                </footer>
-            </div>
-        </section>
-        <div class="slds-backdrop slds-backdrop_open"></div>
-    </template>
+
 </template>
+
+  

@@ -142,10 +142,10 @@ public void sendSMSandEmail(Set<Id> contactList){
     Set<Id> memberIds = new Set<Id>();
     List<Messaging.SingleEmailMessage> emailList = new  List<Messaging.SingleEmailMessage>();
     String dealerportalURL = system.label.Dealer_Portal_Page_URL;
-    List<Opportunity> oppList = [SELECT Id, Bank_Service_Rep_Name_MSR__c, Bank_Service_Rep_Name_MSR__r.Email, Mobile__c, Auto_Shopper__r.RecordTypeId, Auto_Shopper__c FROM Opportunity WHERE Auto_Shopper__c =: contactList AND IsClosed = false Order By CreatedDate desc ];
+    List<Opportunity> oppList = [SELECT Id, Bank_Service_Rep_Name_MSR__c, Bank_Service_Rep_Name_MSR__r.Email, Bank_Service_Rep_Name_MSR__r.FastPass_Team_Email_Support__c, Mobile__c, Auto_Shopper__r.RecordTypeId, Auto_Shopper__c FROM Opportunity WHERE Auto_Shopper__c =: contactList AND IsClosed = false Order By CreatedDate desc ];
     for(Opportunity eachOpp : oppList){ 
         if(!memberIds.contains(eachOpp.Auto_Shopper__c)){
-            if(eachOpp.Bank_Service_Rep_Name_MSR__c != null && eachOpp.Bank_Service_Rep_Name_MSR__r.Email != null && emailTemplate != null){
+            if(eachOpp.Bank_Service_Rep_Name_MSR__c != null && eachOpp.Bank_Service_Rep_Name_MSR__r.Email != null && emailTemplate != null && eachOpp.Bank_Service_Rep_Name_MSR__r.FastPass_Team_Email_Support__c == false){
                 Messaging.SingleEmailMessage emailTempRender = Messaging.renderStoredEmailTemplate(emailTemplate.Id, null, eachOpp.Id);
 
                 Map<String, Object> params = new Map<String, Object>();

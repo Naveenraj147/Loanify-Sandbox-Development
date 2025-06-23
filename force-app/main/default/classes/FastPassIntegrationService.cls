@@ -63,11 +63,14 @@ global with sharing class FastPassIntegrationService {
                 else if (requestType == 'updateDownPayment') {
                     jsonResponse = updateDownPayment(requestBody);
                 }
+                else if (requestType == 'sendLoanAcceptedEmail') {
+                    jsonResponse = sendLoanAcceptedEmail(requestBody);
+                }
                 else {
                     wrapper.error = new Map<String, String>{'Message' => 'Could not find a match for RequestType'};
                     sendErrorEmail('Failed to ' + requestType, JSON.serialize(wrapper.error));
                 }
-                if (!(requestType == 'topFiveList' || requestType == 'updateDownPayment' )){
+                if (!(requestType == 'topFiveList' || requestType == 'updateDownPayment'|| requestType == 'sendLoanAcceptedEmail')){
                     System.debug('Inside responseList adding ==> '+ jsonResponse);
                     responseList.add(wrapper);
                 }
@@ -89,8 +92,10 @@ global with sharing class FastPassIntegrationService {
             System.debug('Exception:' + errorMessage);
             sendErrorEmail('failed to process request', errorMessage);
             responseList.add(wrapper);
-            // RestResponse res = new RestResponse();
-            // RestContext.response = res;
+            if(Test.isRunningTest()){
+                RestResponse res = new RestResponse();
+                RestContext.response = res; 
+            }
             RestContext.response.statusCode = 500;
             jsonResponse = JSON.serialize(responseList);
             RestContext.response.responseBody = Blob.valueOf(jsonResponse);
@@ -130,8 +135,8 @@ global with sharing class FastPassIntegrationService {
             if (String.isBlank(vehicleVIN)) {
                 blankFields.add('vehicleVIN');
             }
-            if (String.isBlank(vehicleName)) {
-                blankFields.add('vehicleName');
+            if (String.isBlank(vehicleName) && !String.isBlank(vehicleVIN)){ 
+                vehicleName = vehicleVIN;
             }
             if (fastpassVehicleId == null) {
                 blankFields.add('fastpassVehicleId');
@@ -158,6 +163,9 @@ global with sharing class FastPassIntegrationService {
                     garageRecord = garage; 
                     if( garage.Active__c == false){
                         garage.Active__c = true;
+                        garage.Prospect_Waiting_Date__c = System.today();
+                        // garage.Status__c = 'Prospect Waiting';
+                        // garage.
                         update garage;
                         
                         wrapp.message = 'Vehicle successfully added into Garage';
@@ -233,6 +241,7 @@ global with sharing class FastPassIntegrationService {
        	garage.FastPass_Dealer_Id__c = dealerMarketcheckId;
         garage.Year__c = modelYear;
         garage.VIN__c = vehicleVIN;
+        garage.Prospect_Waiting_Date__c = system.today();
         garage.Name = vehicleName.length() > 80 ? vehicleName.substring(0, 80) : vehicleName;
         if(vehicleName.length() > 80 ){
             garage.Full_Name__c = vehicleName;
@@ -372,6 +381,7 @@ global with sharing class FastPassIntegrationService {
         Public String MarketCheckId;
         Public DateTime CreatedDate;
         public String Sender;
+        public String SenderName;
         public String EmailMessage;
     }    
     global class CreateResponseWrapperSuccessJson {
@@ -609,6 +619,9 @@ global with sharing class FastPassIntegrationService {
                 portalMessage.Request_Type__c = 'Test_Drive';
                 DateTime testDriveDT = DateTime.valueOf(testDriveDateTime);
                 updateGarage.Scheduled_Test_Drive_Datetime__c = testDriveDT;
+                updateGarage.TD_Scheduled_Date__c = system.today();
+                updateGarage.Status__c = 'Lead Waiting';
+
             }
             insert portalMessage;
             String dealerName = acc!= null? acc.Name : lead != null? lead.Company : '';
@@ -841,6 +854,7 @@ global with sharing class FastPassIntegrationService {
             Integer fastpassVehicleId = Integer.valueOf(requestBody.get('fastpassVehicleId'));
             
             List<String> blankFields  = new List<String> ();
+            Map<String, String> senderEmailNameMap = new Map<String, String>();
             if (String.isBlank(memberLoanId)){
                 blankFields.add('LoanId');
             }
@@ -872,7 +886,7 @@ global with sharing class FastPassIntegrationService {
                 return wrapper;
             }
             Integer index = (PageNumber - 1) * 50;
-            List<opportunity>  oppList = [SELECT Id, Auto_Shopper__r.Name, Dealer__r.Id, Card_Number__c, Vehicle_VIN__c
+            List<opportunity>  oppList = [SELECT Id, Auto_Shopper__r.Name, Dealer__r.Id, Card_Number__c, Vehicle_VIN__c, Branch__c, Name
                                           FROM Opportunity 
                                           WHERE Card_Number__c = :memberLoanId
                                           LIMIT 1];
@@ -887,8 +901,14 @@ global with sharing class FastPassIntegrationService {
             List<Portal_Message__c> allPortalMessage;
             integer count = 0;
             String chatId;
+            List<User> userList = [SELECT Id, Email, Name  FROM User WHERE IsActive = true];
+            if(userList.size() > 0){
+                for(User eachUser : userList){
+                    senderEmailNameMap.put(eachUser.Email, eachUser.Name);
+                }
+            }
             if(PortalType == 'Dealer'){
-                List<Garage__c> garList = [SELECT Id, Name, VIN__c, FastPass_Dealer_Id__c,Pending_Requests__c,Pending_Request_JSON__c,FastPass_Vehicle_Id__c,Chat_Id__c  From Garage__c WHERE FastPass_Vehicle_Id__c =:fastpassVehicleId AND Opportunity__c =: opp.Id LIMIT 1];
+                List<Garage__c> garList = [SELECT Id, Name, VIN__c, FastPass_Dealer_Id__c,Pending_Requests__c,Pending_Request_JSON__c,FastPass_Vehicle_Id__c,Chat_Id__c, Dealer__c, Lead_Dealer__c  From Garage__c WHERE FastPass_Vehicle_Id__c =:fastpassVehicleId AND Opportunity__c =: opp.Id LIMIT 1];
                 Garage__c gar = garList.size() > 0 ? garList[0] : null;
                 if(gar == null){
                     wrapper.error = new Map<String, String>{'Message' => 'No Vehicle found in garage'};
@@ -897,12 +917,39 @@ global with sharing class FastPassIntegrationService {
                     return wrapper;       
                 }
                 chatId = gar != null? gar.Chat_Id__c : null;
-                allPortalMessage = [SELECT Id, Opportunity__c, CreatedDate, Message__c, Is_Member_Message__c, Message_Sent_Date_Time__c 
+                allPortalMessage = [SELECT Id, Opportunity__c, CreatedDate, Message__c, Is_Member_Message__c, Message_Sent_Date_Time__c, Sender_Email__c 
                                                         FROM Portal_Message__c
                                                         WHERE Opportunity__c = :opp.Id AND Garage__c = :gar.Id
                                                         ORDER BY CreatedDate DESC
                                                         LIMIT 50 OFFSET :index];
                 List<AggregateResult> portalMessageCount = [SELECT COUNT(id) total FROM Portal_Message__c WHERE Opportunity__c = :opp.Id AND Garage__c = :gar.Id];
+                if(gar.Dealer__c != null){
+                    List<AccountContactRelation> dealerProACR = [SELECT Id, Contact.Name, Contact.Email FROM AccountContactRelation WHERE AccountId =:gar.Dealer__c ]; 
+                    for(AccountContactRelation each: dealerProACR){
+                        if(each.Contact.Email != null && each.Contact.Name != null){
+                            senderEmailNameMap.put(each.Contact.Email, each.Contact.Name );
+                        }
+                    }
+                }
+                else if(gar.Lead_Dealer__c != null){
+                    List<Lead> leadDealerList = [SELECT Id, Name, Manager_Name__c, Manager_Email__c, Dealer_Pro_1_Email__c, Dealer_Pro_1_Name__c, Dealer_Pro_2_Email__c, Dealer_Pro_2_Name__c, Dealer_Pro_3_Email__c, Dealer_Pro_3_Name__c FROM Lead WHERE Id =:gar.Lead_Dealer__c];
+                    if(leadDealerList.size() > 0){
+                        Lead leadDealer = leadDealerList[0]; 
+                            if( leadDealer.Manager_Email__c != null && leadDealer.Manager_Name__c != null ){
+                                senderEmailNameMap.put(leadDealer.Manager_Email__c, leadDealer.Manager_Name__c);
+                            }
+                            if(leadDealer.Dealer_Pro_1_Email__c != null  && leadDealer.Dealer_Pro_1_Name__c != null ){
+                                senderEmailNameMap.put(leadDealer.Dealer_Pro_1_Email__c, leadDealer.Dealer_Pro_1_Name__c);
+                            }
+                            if(leadDealer.Dealer_Pro_2_Email__c != null  && leadDealer.Dealer_Pro_2_Name__c != null ){
+                                senderEmailNameMap.put(leadDealer.Dealer_Pro_2_Email__c, leadDealer.Dealer_Pro_2_Name__c);
+                            }
+                            if(leadDealer.Dealer_Pro_3_Email__c != null  && leadDealer.Dealer_Pro_3_Name__c != null ){
+                                senderEmailNameMap.put(leadDealer.Dealer_Pro_3_Email__c, leadDealer.Dealer_Pro_3_Name__c);
+                            }
+                            
+                    }
+                }
                 if (!portalMessageCount.isEmpty()) {
                     count = (Integer) portalMessageCount[0].get('total');
                 }
@@ -910,11 +957,22 @@ global with sharing class FastPassIntegrationService {
             }
             else{
                 
-                allPortalMessage = [SELECT Id, Opportunity__c, CreatedDate, Message__c, Is_Member_Message__c, Portal_Type__c, Message_Sent_Date_Time__c 
+                allPortalMessage = [SELECT Id, Opportunity__c, CreatedDate, Message__c, Is_Member_Message__c, Portal_Type__c, Message_Sent_Date_Time__c, Sender_Email__c 
                                                         FROM Portal_Message__c
                                                         WHERE Opportunity__c = :opp.Id AND Garage__c = null AND Portal_Type__c =: portalType
                                                         ORDER BY CreatedDate DESC 
                                                         LIMIT 50 OFFSET :index];
+                if(opp.Branch__c != null){
+                    List<AccountContactRelation> msrACR = [SELECT Id, Contact.Name, Contact.Email FROM AccountContactRelation WHERE AccountId =:opp.Branch__c ];
+                    if(msrACR.size() > 0){
+                        for(AccountContactRelation eachMSR : msrACR){
+                            if(eachMSR.Contact.Email != null && eachMSR.Contact.Name != null)
+                            senderEmailNameMap.put(eachMSR.Contact.Email, eachMSR.Contact.Name);
+                        }
+                    }
+                }
+                
+                
                 List<AggregateResult> portalMessageCount = [SELECT COUNT(id) total FROM Portal_Message__c WHERE Opportunity__c = :opp.Id AND Garage__c = null AND Portal_Type__c =: portalType];
                 if (!portalMessageCount.isEmpty()) {
                     count = (Integer) portalMessageCount[0].get('total');
@@ -933,6 +991,7 @@ global with sharing class FastPassIntegrationService {
                 emailDetails.CreatedDate = eachPM.Message_Sent_Date_Time__c;
                 emailDetails.EmailMessage = eachPM.Message__c;
                 emailDetails.Sender = eachPM.Is_Member_Message__c? 'Member' : PortalType == 'Dealer'? 'Dealer' : PortalType == 'Advisor'? 'Advisor' : 'MSR' ;
+                emailDetails.SenderName = eachPM.Is_Member_Message__c? opp.Name :senderEmailNameMap.containsKey(eachPM.Sender_Email__c)? senderEmailNameMap.get(eachPM.Sender_Email__c) : null;
                 conversations.add(emailDetails);
             }
                         
@@ -1161,9 +1220,83 @@ global with sharing class FastPassIntegrationService {
 
     }
 
+    public static string sendLoanAcceptedEmail(Map<String, Object> requestBody){
+        Map<String, String> successList = new Map<String, String>();
+        Map<String, String> errorList = new Map<String, String>();
+        String memberLoanId = (String) requestBody.get('LoanId');
+        Opportunity opp = getOpportunity(memberLoanId);
+         List<String> blankFields  = new List<String> ();
+            if (String.isBlank(memberLoanId)){
+                blankFields.add('LoanId');
+            }
+
+        if (!blankFields.isEmpty()) {
+            String nullFields = String.join(blankFields, ', ');
+            errorList = new Map<String, String>{
+                'Message' => 'Required fields are missing: ' + nullFields
+                    };
+        }
+        else if(opp == null){
+            errorList = new Map<String, String>{
+                'LoanId' => memberLoanId,
+                'Message' => 'No matching opportunity found for the provided LoanId.' 
+                    };
+        }
+        else{
+            List<EmailTemplate> emailTemplateList = [SELECT Id, Name, DeveloperName, Description, Body, Subject, HtmlValue FROM EmailTemplate WHERE Developername = 'CUNexus_Accept_Loan_Button_Notification_to_MSR'];
+            Messaging.SingleEmailMessage emailTempRender = Messaging.renderStoredEmailTemplate(emailTemplateList[0].Id, null, opp.Id);
+            Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+              List<String> toAddress = new List<String>();
+            if(opp.Bank_Service_Rep_Name_MSR__c != null){
+                email.setToAddresses(new List<String>{opp.Bank_Service_Rep_Name_MSR__r.Email});
+            }
+            else if(opp.Branch__c != null){
+                List<AccountContactRelation> achList = [SELECT Id, Contact.Email FROM AccountContactRelation WHERE Account.Id = :opp.Branch__c];
+                for(AccountContactRelation ach : achList){
+                    if(ach.Contact.Email != null ){
+                        toAddress.add(ach.Contact.Email);
+                    }
+                }
+                email.setToAddresses(toAddress);
+
+            }
+            else{
+                errorList.put('Message','No related Branch found for the provided loan Id.');
+                sendErrorEmail('failed to process sendLoanAcceptedEmail request', '<br/>Opportunity Id: '+ opp.Id + '<br/>'+
+                                                                'Reason: No related Branch found for the provided loan Id.'); 
+            }
+            if(opp.Bank_Service_Rep_Name_MSR__c != null || toAddress.size() > 0 ){
+                List<OrgWideEmailAddress> orgWideEmails = [SELECT Id, Address, DisplayName FROM OrgWideEmailAddress where DisplayName = 'Support' Limit 1];
+                OrgWideEmailAddress orgWideEmail = orgWideEmails.size() > 0 ? orgWideEmails[0] : null;
+                String orgWideEmailId = orgWideEmail != null? orgWideEmail.Id : null;
+
+                String subject = emailTempRender.getSubject(); 
+                String htmlBody = emailTempRender.getHtmlBody();
+                htmlBody = opp.Auto_Shopper__r.Email!= null? htmlBody.replace('{Member_Email}', opp.Auto_Shopper__r.Email):'';
+                email.setHtmlBody(htmlBody);
+                email.setSubject(subject);
+                email.setSaveAsActivity(true); 
+                email.setWhatId(opp.Id);
+                email.setUseSignature(false);
+                if(orgWideEmailId != null){
+                    email.setOrgWideEmailAddressId(orgWideEmailId);
+                }
+                    Messaging.sendEmail(new List< Messaging.SingleEmailMessage>{email});
+                    successList.put('Message','Email Sent Sucessfully');
+            }
+            else if(!errorList.containsKey('Message')){
+                errorList.put('Message','No Bank Service Representative is found.');   
+                 sendErrorEmail('failed to process sendLoanAcceptedEmail request', '<br/>Opportunity Id: '+ opp.Id + '<br/>'+
+                                                                'Reason: No Bank Service Representative is found.'); 
+            }
+            
+        }
+        return  JSON.serialize((new Map<String, Map<String, String>>{ 'error' => errorList, 'success' => successList}));
+    }
+
 
     public static Opportunity getOpportunity(String memberLoanId){
-        List<Opportunity> oppList = [SELECT Id, Name, Branch__c, Branch__r.ParentId, Card_Number__c, Auto_Shopper__r.Email, Bank_Service_Rep_Name_MSR__c
+        List<Opportunity> oppList = [SELECT Id, Name, Branch__c, Branch__r.ParentId, Card_Number__c, Auto_Shopper__r.Email, Bank_Service_Rep_Name_MSR__c, Bank_Service_Rep_Name_MSR__r.Email
                                          FROM Opportunity 
                                          WHERE Card_Number__c = :memberLoanId LIMIT 1];
         Opportunity opp = oppList.size() > 0 ? oppList[0] : null;

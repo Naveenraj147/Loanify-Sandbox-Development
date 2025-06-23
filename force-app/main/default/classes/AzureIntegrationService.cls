@@ -52,7 +52,7 @@ global without sharing class AzureIntegrationService {
         Map<String,String> successData = new Map<String,String>();
         Map<String,String> errorData = new Map<String,String>();
         if(!accList.isEmpty()){
-            String recTypeName = action=='CreateDealerData' ? 'Auto_Dealer' : 'Bank';
+            String recTypeName = action=='CreateDealerData' ? 'Auto_Dealer' : 'Credit_Union_Branch';
             RecordType accRecType = [SELECT Id, Name, DeveloperName, SobjectType FROM RecordType where SobjectType = 'Account' and DeveloperName=:recTypeName];
             //assign record type
             for(Account each : accList){
@@ -115,13 +115,29 @@ global without sharing class AzureIntegrationService {
         }
         
         Map<String,Contact> existingContacts = new Map<String,Contact>();
-        for(Contact each : [select Id,Name,Email from Contact where Email in :emailSet]){
+        Map<String,List<String>> achListMap = new Map<String,List<String>>();
+        if((action=='CreateDealerProData' || action=='CreateServiceRepData')){
+            List<AccountContactRelation> existingACHList = [SELECT Id, Contact.Email, AccountId, ContactId from AccountContactRelation where Contact.Email in :emailSet];
+            for(AccountContactRelation eachACH : existingACHList){
+                if(achListMap.containsKey(eachACH.AccountId)){
+                    achListMap.get(eachACH.AccountId).add(eachACH.ContactId);
+                }
+                else{
+                    achListMap.put(eachACH.AccountId, new list<String>{eachACH.ContactId});
+                }
+            }
+        }
+        System.debug('achListMap ==> ' + achListMap);
+        for(Contact each : [select Id, Name, Email, AccountId from Contact where Email in :emailSet]){
             existingContacts.put(each.Email, each);
         }
         System.debug('existingContacts:'+existingContacts);
         List<Contact> newConList = new List<Contact>();
         Map<String,String> successData = new Map<String,String>();
         Map<String,String> errorData = new Map<String,String>();
+        Set<String> newACHtoCreateSet = new Set<String>();
+        Set<String> newACHforContactSet = new Set<String>();
+        Set<String> newContactEmails = new Set<String>();
         String errorCode =  action=='CreateDealerProData' ? 'DEALER_ID_NOT_FOUND' : 'BANK_ID_NOT_FOUND';
         System.debug('here #0');
         for(Contact each : conList){
@@ -138,10 +154,24 @@ global without sharing class AzureIntegrationService {
                 continue;
             }
             System.debug('here #0.4'+ each);
-            if(existingContacts.containsKey(each.Email))
+            String accountId = (String)(each.AccountId != null? each.AccountId : each.get('AccountId'));
+            if(existingContacts.containsKey(each.Email) && existingContacts.get(each.Email).AccountId == accountId)
                 successData.put(each.Email, existingContacts.get(each.Email).Id);
-            else
+            else if(existingContacts.containsKey(each.Email) && existingContacts.get(each.Email).AccountId != accountId && accountId != null){
+                newACHtoCreateSet.add(existingContacts.get(each.Email).Id + '-' + accountId);
+                successData.put(each.Email, existingContacts.get(each.Email).Id);
+            }
+            else if((action=='CreateDealerProData' || action=='CreateServiceRepData') && newContactEmails.contains(each.Email)){
+                newACHforContactSet.add(each.email + '-' + accountId);
+            }
+            else{
                 newConList.add(each);
+            }
+            if((action=='CreateDealerProData' || action=='CreateServiceRepData')){
+                newContactEmails.add(each.Email);
+            }
+                
+
         }
         
         System.debug('here #1');
@@ -173,6 +203,34 @@ global without sharing class AzureIntegrationService {
                 }
             }
         }
+        List<AccountContactRelation> newACHtoCreateList = new List<AccountContactRelation>();
+        if(newACHtoCreateSet.size() > 0){
+            for(String each : newACHtoCreateSet){
+                List<String> contactAccountId = each.split('-');
+               if((!achListMap.containsKey(contactAccountId[1])) || (achListMap.containsKey(contactAccountId[1]) && !(achListMap.get(contactAccountId[1]).contains(contactAccountId[0]))) ){
+                AccountContactRelation ach = new AccountContactRelation();
+                ach.ContactId = contactAccountId[0];
+                ach.AccountId = contactAccountId[1];
+                newACHtoCreateList.add(ach);
+               }
+            }
+        }
+        if(newACHforContactSet.size() > 0){
+            for(String each : newACHforContactSet){
+                List<String> emailAccountId = each.split('-');
+                if(successData.containsKey(emailAccountId[0])){
+                    if((!achListMap.containsKey(emailAccountId[1])) || (achListMap.containsKey(emailAccountId[1]) && !achListMap.get(emailAccountId[1]).contains(successData.get(emailAccountId[0])))){
+                        AccountContactRelation ach = new AccountContactRelation();
+                        ach.ContactId = successData.get(emailAccountId[0]);
+                        ach.AccountId = emailAccountId[1];
+                        newACHtoCreateList.add(ach);
+                    }
+                }
+            }
+        }
+        if(newACHtoCreateList.size() > 0){
+            Database.insert(newACHtoCreateList, false);
+        }
         System.debug('here #1');
         wrapper.success = successData;
         wrapper.error = errorData;
@@ -202,9 +260,9 @@ global without sharing class AzureIntegrationService {
                 
             }
             if(!accIdMap.isEmpty()){
-                List<RecordType> bankRecTypeList = [select Id,Name from RecordType where DeveloperName ='Bank' and SobjectType='Account'];
+                List<RecordType> bankRecTypeList = [select Id,Name from RecordType where DeveloperName ='Credit_Union_Branch' and SobjectType='Account'];
                 System.debug('accIdMap:'+accIdMap);
-                accMap = new Map<Id,Account>([select Id,Name from Account where Name in :accIdMap.keySet() and RecordType.DeveloperName ='Bank']);
+                accMap = new Map<Id,Account>([select Id,Name from Account where Name in :accIdMap.keySet() and RecordType.DeveloperName ='Credit_Union_Branch']);
                 for(Account acc : accMap.values()){
                     accIdMap.put(acc.Name, acc.Id);
                 }
@@ -225,7 +283,7 @@ global without sharing class AzureIntegrationService {
             }
             Map<Id,Map<String,Id>> accConsMap = new Map<Id,Map<String,Id>>();
             if(conIdMap!=null){
-                conMap = new Map<Id,AccountContactRelation>([select Id, Contact.Name, AccountId, ContactId from AccountContactRelation where Contact.Name in :conIdMap.keySet() and AccountId!=null and Contact.RecordType.DeveloperName ='Bank_Service_Rep']);
+                conMap = new Map<Id,AccountContactRelation>([select Id, Contact.Name, AccountId, ContactId from AccountContactRelation where AccountId in :accIdMap.values() and AccountId!=null and Contact.RecordType.DeveloperName ='Bank_Service_Rep']);
                 for(AccountContactRelation con : conMap.values()){
                     if(!accConsMap.containsKey(con.AccountId)){
                         accConsMap.put(con.AccountId, new Map<String,Id>());
@@ -886,7 +944,7 @@ global without sharing class AzureIntegrationService {
                                     Account account = accountList[0];
                                     if (account.RecordType.DeveloperName == 'Auto_Dealer') {
                                         endpointUrl = metaDataField.Update_Dealer__c;
-                                    } else if (account.RecordType.DeveloperName == 'Bank') {
+                                    } else if (account.RecordType.DeveloperName == 'Credit_Union_Branch') {
                                         endpointUrl = metaDataField.Update_Branch__c;
                                     }
                                 }

@@ -13,20 +13,50 @@ public class OpportunityTriggerHelper {
             set<Id> msrUpdatedOppIds = new Set<Id>();
             set<Id> msrUpdatedBranchIds = new Set<Id>();
             
+            // Collect Opportunity IDs that have phone numbers and might need SMS
+            Set<Id> oppIdsWithPhoneNumbers = new Set<Id>();
             for(Opportunity eachOpp : newOppList){
                 if(System.Label.MSR_Notifications == 'TRUE'){
                     if((eachOpp.Mobile__c != null || eachOpp.Phone__c != null) && smsTemplate != null ){
-                        String smsField = eachOpp.Mobile__c != null? 'Mobile__c' : 'Phone__c';
-                        if(oldMap == null){
-                            tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId(smsField, smsTemplate.Id, eachOpp.Id);
-                        }
-                        else if((eachOpp.Phone__c == null && eachOpp.Mobile__c != null && oldMap.get(eachOpp.Id).Mobile__c == null) || (eachOpp.Mobile__c == null && eachOpp.Phone__c != null && oldMap.get(eachOpp.Id).Phone__c == null ) && eachOpp.FastPass_Team_SMS_Support__c == false ){
-                            tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId(smsField, smsTemplate.Id, eachOpp.Id);
-                        }
+                        // Add to collection for record type check
+                        if(eachOpp.Auto_Shopper__c != null) {
+                            oppIdsWithPhoneNumbers.add(eachOpp.Id);
+                         }
                     }
                     if(eachOpp.Bank_Service_Rep_Name_MSR__c != null && eachOpp.Download_Stamp__c != null && (oldMap == null || oldMap.get(eachOpp.Id).Bank_Service_Rep_Name_MSR__c == null)  ){
                         msrUpdatedOppIds.add(eachOpp.Id);
                     } 
+                }
+            }
+            
+            // Query for opportunities with their related contacts' record types
+            Map<Id, Opportunity> oppWithContactRecordTypes = new Map<Id, Opportunity>();
+            if(!oppIdsWithPhoneNumbers.isEmpty() || !msrUpdatedOppIds.isEmpty()  ) {
+                oppWithContactRecordTypes = new Map<Id, Opportunity>([
+                    SELECT Id, Mobile__c, Phone__c, Auto_Shopper__c, 
+                           Auto_Shopper__r.RecordType.DeveloperName, FastPass_Team_SMS_Support__c
+                    FROM Opportunity 
+                    WHERE Id IN :oppIdsWithPhoneNumbers OR Id IN :msrUpdatedOppIds
+                ]);
+            }
+            
+            // Process SMS sending with Carbots record type check
+            for(Opportunity eachOpp : newOppList){
+                if(System.Label.MSR_Notifications == 'TRUE'){
+                    if((eachOpp.Mobile__c != null || eachOpp.Phone__c != null) && smsTemplate != null && eachOpp.Auto_Shopper__c != null && oppWithContactRecordTypes.containsKey(eachOpp.Id)){
+                        // Check if this opportunity is in our map and has the right contact record type
+                        Opportunity oppWithContact = oppWithContactRecordTypes.get(eachOpp.Id);
+                        if(oppWithContact != null && oppWithContact.Auto_Shopper__r.RecordType.DeveloperName == 'Auto_Shopper_Carbots' && oppWithContact.FastPass_Team_SMS_Support__c == false) { // Send SMS ONLY to Carbot member
+                            
+                            String smsField = eachOpp.Mobile__c != null? 'Mobile__c' : 'Phone__c';
+                            if(oldMap == null){
+                                tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId(smsField, smsTemplate.Id, eachOpp.Id);
+                            }
+                            else if((eachOpp.Phone__c == null && eachOpp.Mobile__c != null && oldMap.get(eachOpp.Id).Mobile__c == null) || (eachOpp.Mobile__c == null && eachOpp.Phone__c != null && oldMap.get(eachOpp.Id).Phone__c == null) ){
+                                tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId(smsField, smsTemplate.Id, eachOpp.Id);
+                            }
+                        }
+                    }
                 }
             }
             

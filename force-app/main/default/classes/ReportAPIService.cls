@@ -36,6 +36,9 @@ global class ReportAPIService {
                         
                     }
                 }
+                else if(requestType=='getDealershipDetails'){
+                    jsonResponse = getDealershipDetails(requestMap);
+                }
                 else{
                     wrapper.success = new Map<String,Object>();
                     wrapper.error = new Map<String,String>{'NOT_FOUND'=>'Could not find the valid requestType'};
@@ -390,5 +393,102 @@ global class ReportAPIService {
     global class CreateResponseWrapper {
         public Map<String,Object> success;
         public Map<String,String> error;
+    }
+
+    public static string getDealershipDetails(Map<String,Object> requestMap){
+        CreateResponseWrapper wrapper = new CreateResponseWrapper();
+        wrapper.error = new Map<String,String>();
+        String jsonString = null;
+        String requiredParameter;
+        List<String> activeDealerProlist = new List<String>();
+        if(!requestMap.containsKey('fpDealerId') ){
+            requiredParameter = 'fpDealerId';
+        }
+        if(requiredParameter != null){
+            wrapper.error = new Map<String,String>{'MISSING'=>'Required parameters couldn\'t empty: '+requiredParameter+'.'};
+                wrapper.success = new Map<String,String>();
+            jsonString = JSON.serialize(wrapper);
+        }
+        else{
+            String fpDealerId = (String)requestMap.get('fpDealerId');
+            if(fpDealerId == null || fpDealerId ==''){
+            wrapper.error = new Map<String,String>{'MISSING'=>'fpDealerId must have value.'};
+                wrapper.success = new Map<String,String>();
+            jsonString = JSON.serialize(wrapper);
+            }
+            else{
+                List<AccountContactRelation> dealerProInfoList = [SELECT Contact.Name FROM AccountContactRelation WHERE Account.FastPass_Dealer_Id__c =: fpDealerId];
+                if(dealerProInfoList.size() > 0){
+                for(AccountContactRelation eachACH: dealerProInfoList){
+                        activeDealerProlist.add(eachACH.Contact.Name);
+                }
+                }
+                else{
+                    List<Account> dealerInfoList = [SELECT Id FROM Account WHERE FastPass_Dealer_Id__c =: fpDealerId LIMIT 1];
+                    List<Lead> leadDealerInfoList = [SELECT Id, Manager_Name__c, Dealer_Pro_1_Name__c, Dealer_Pro_2_Name__c, Dealer_Pro_3_Name__c FROM Lead WHERE FastPass_Dealer_Id__c =: fpDealerId LIMIT 1];
+                    if(dealerInfoList.size() > 0 || leadDealerInfoList.size() > 0 ){
+                        if(leadDealerInfoList.size() > 0 ){
+                            Lead leadDealer = leadDealerInfoList[0];
+                            if(leadDealer.Manager_Name__c != null ){
+                                activeDealerProlist.add(leadDealer.Manager_Name__c);
+                            }
+                            if(leadDealer.Dealer_Pro_1_Name__c != null ){
+                                activeDealerProlist.add(leadDealer.Dealer_Pro_1_Name__c);
+                            }
+                            if(leadDealer.Dealer_Pro_2_Name__c != null ){
+                                activeDealerProlist.add(leadDealer.Dealer_Pro_2_Name__c);
+                            }
+                            if(leadDealer.Dealer_Pro_3_Name__c != null ){
+                                activeDealerProlist.add(leadDealer.Dealer_Pro_3_Name__c);
+                            }
+                            if(!(activeDealerProlist.size() > 0)){
+                                wrapper.error = new Map<String,String>{'NOTFOUND'=>'No Dealer Pro Found for Provided FastPass Dealer Id.'};
+                            }                    
+                        }
+                        else if(dealerInfoList.size() > 0){
+                            wrapper.error = new Map<String,String>{'NOTFOUND'=>'No Dealer Pro Found for Provided FastPass Dealer Id.'};
+                        }
+                    }
+                    else{
+                        wrapper.error = new Map<String,String>{'NOTFOUND'=>'No Matching Dealer Found for Provided FastPass Dealer Id.'};
+                            
+                    }
+                }
+            }
+            if(wrapper.error.keySet().size() == 0){
+                wrapper.success = new Map<String, Object>();
+                wrapper.success.put('ActiveDealerPros', activeDealerProlist);
+                wrapper.success.put('ActiveGarages', getActiveGarageData(fpDealerId));
+                wrapper.success.put('Message', 'Dealer Data fetched successfully');   
+                wrapper.error = new Map<String,String>();
+            }
+        }        
+        jsonString = JSON.serialize(wrapper);
+        return jsonString;
+    }
+
+    public static List<Map<String,String>> getActiveGarageData(String fpdealerId){
+        List<Garage__c> activeGarageList = [SELECT Name, Opportunity__r.Card_Number__c, Opportunity__r.Name, Opportunity__r.Loan_Expiration_Date__c, Status__c, VIN__c, FastPass_Dealer_Id__c, FastPass_Vehicle_Id__c, Prospect_Waiting_Date__c, TD_Scheduled_Date__c, OTD_Provided_Date__c, Lead_Waiting_Date__c FROM Garage__c WHERE Active__c = true AND FastPass_Dealer_Id__c =:fpdealerId ];
+        List<Map<String,String>> garageInfoList = new  List<Map<String,String>>();
+        if(activeGarageList.size() > 0){
+            for(Garage__c eachGarage : activeGarageList){
+                Map<String,String> tempMap = new Map<String,String>();
+                tempMap.put('Name', eachGarage.Name);
+                tempMap.put('LoanId', eachGarage.Opportunity__r.Card_Number__c);
+                tempMap.put('Status', eachGarage.Status__c);
+                tempMap.put('VehicleVIN', eachGarage.VIN__c);
+                tempMap.put('FastPassDealerId', eachGarage.FastPass_Dealer_Id__c);
+                tempMap.put('fastpassVehicleId', String.valueOf(eachGarage.FastPass_Vehicle_Id__c));
+                tempMap.put('CustomerName', eachGarage.Opportunity__r.Name);
+                tempMap.put('CloseDate', String.valueOf(eachGarage.Opportunity__r.Loan_Expiration_Date__c));
+                tempMap.put('ProspectWaitingDate', String.valueOf(eachGarage.Prospect_Waiting_Date__c));
+                tempMap.put('OTDProvidedDate', String.valueOf(eachGarage.OTD_Provided_Date__c));
+                tempMap.put('LeadWaitingDate', String.valueOf(eachGarage.Lead_Waiting_Date__c));
+                tempMap.put('TDScheduledDate', String.valueOf(eachGarage.TD_Scheduled_Date__c));
+                garageInfoList.add(tempMap);
+            }
+
+        }
+        return garageInfoList;
     }
 }
