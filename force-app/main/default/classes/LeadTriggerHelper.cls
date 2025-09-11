@@ -83,7 +83,7 @@ public class LeadTriggerHelper {
                             if(each.F_I_Email__c != null && each.F_I_Manager_Name__c != null){
                                 newContactsList.add(createContact(each.F_I_Manager_Name__c, each.F_I_Email__c, 'F&I Manager', each.ConvertedAccountId, each.F_I_Manager_Cell_Phone__c, recordTypeIdDealerContact, null));
                             }
-                            
+                            TriggerAPIService.logTriggerEvent('SF_DML_INSERT16', 'SF34', UserInfo.getUserName(), null);
                         }
                         else{
                             if(each.Contact_1_Name__c != null && each.Contact_1_Email__c != null){
@@ -131,6 +131,7 @@ public class LeadTriggerHelper {
                             if(each.Lead_MSR_Email__c != null && each.Lead_MSR_Name__c != null){
                                 newContactsList.add(createContact(each.Lead_MSR_Name__c, each.Lead_MSR_Email__c, 'Lead MSR', each.ConvertedAccountId, each.Lead_MSR_Cell_Phone__c, recordTypeIdCUContact, null));
                             }
+                            TriggerAPIService.logTriggerEvent('SF_DML_INSERT17', 'SF35', UserInfo.getUserName(), null);
                         }
                         if(each.ConvertedContactId != null){
                             contactIdsToDeleteSet.add(each.ConvertedContactId);
@@ -176,6 +177,7 @@ public class LeadTriggerHelper {
                     }
                     System.Debug('Update Dealer');
                     update garageList;
+                    TriggerAPIService.logTriggerEvent('SF_DML_UPDATE11', 'SF34', UserInfo.getUserName(), null);
                 }
                 
               List<String> ConvertedLeadJsonList = new List<String>();
@@ -188,7 +190,7 @@ public class LeadTriggerHelper {
                 if(ConvertedLeadJsonList.size() > 0){
                     AzureIntegrationService.updateDataInAzure(ConvertedLeadJsonList);
                 }
-
+                
             }
             
             if(!leadIds.isEmpty() ){
@@ -233,6 +235,7 @@ public class LeadTriggerHelper {
             if(garListToUpdate.size() > 0){
 				System.debug('Inside garage Update');
                 update garListToUpdate;
+                TriggerAPIService.logTriggerEvent('SF_DML_UPDATE19', 'SF33', UserInfo.getUserName(), null);
             }
             List<Portal_Message__c> portalMessageList = [SELECT Is_Pending__c FROM Portal_Message__c WHERE Is_Pending__c = true AND Garage__c IN : garListToUpdate ];
             System.debug('portalMessageList ===> '+ portalMessageList);
@@ -242,6 +245,7 @@ public class LeadTriggerHelper {
                     eachPM.Is_Pending__c = false;
                 }
                 update portalMessageList;
+                TriggerAPIService.logTriggerEvent('SF_DML_UPDATE20', 'SF33', UserInfo.getUserName(), null);
             }
         }
     }

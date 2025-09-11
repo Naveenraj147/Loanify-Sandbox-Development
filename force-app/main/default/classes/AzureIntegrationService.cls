@@ -27,8 +27,6 @@ global without sharing class AzureIntegrationService {
             }
             if(!wrapper.error.isEmpty())
                 sendErrorEmail('failed to '+action, JSON.serialize(wrapper.error));
-            System.debug('successData: '+wrapper.success);
-            System.debug('errorData: '+wrapper.error);
             return wrapper;  
         }catch (Exception e) {
             // Handling exceptions and returning an error message
@@ -37,7 +35,6 @@ global without sharing class AzureIntegrationService {
             String errorMessage = e.getTypeName()+': '+e.getMessage()+' Line: '+e.getLineNumber();
             wrapper.error = new Map<String,String>{'exception'=>errorMessage};
                 wrapper.success = new Map<String,String>();
-            System.debug('Exception:'+errorMessage);
             sendErrorEmail('failed to '+action, errorMessage);
             return wrapper;
         }
@@ -81,6 +78,7 @@ global without sharing class AzureIntegrationService {
                         successData.put(each.Name, each.Id);
                     }
                 }
+                TriggerAPIService.logTriggerEvent('SF_DML_INSERT2', 'SF5', UserInfo.getUserName(), null);
             }
         }
         wrapper.success = successData;
@@ -96,17 +94,21 @@ global without sharing class AzureIntegrationService {
         CreateResponseWrapper wrapper = new CreateResponseWrapper();
         // Deserialize the JSON request body into a list of Contact records
         List<Contact> conList = (List<Contact>)JSON.deserialize(req.requestBody.tostring(), List<Contact>.class);
-        String conRecTypeName = action=='CreateMemberData' ? 'Auto_Shopper' : action=='CreateDealerProData' ? 'Auto_Dealer_Pro' : action=='CreateServiceRepData' ? 'Bank_Service_Rep' : action=='CreateCarbotsMemberData' ? 'Auto_Shopper_Carbots' : action=='CreateCUnexusMemberData' ? 'Auto_Shopper_CUnexus' : null;
-        RecordType conRecType = [SELECT Id, Name, DeveloperName, SobjectType FROM RecordType where SobjectType = 'Contact' and DeveloperName=:conRecTypeName];
+        String conRecTypeName = action=='CreateDealerProData' ? 'Auto_Dealer_Pro' : action=='CreateServiceRepData' ? 'Bank_Service_Rep' : 'Auto_Shopper';
+        RecordType conRecType = [SELECT Id, Name, DeveloperName, SobjectType FROM RecordType where SobjectType = 'Contact' and DeveloperName =: conRecTypeName];
         Set<String> emailSet = new Set<String>();
         //assign record type
         for(Contact each : conList){
-            System.debug('Con:'+each);
-            if(conRecTypeName == 'Auto_Shopper_Carbots'){
+            if(action == 'CreateCarbotsMemberData'){
                 each.Source__c = 'Carbots';
+                each.Member_Type__c = 'Carbots (M3)';
             }
-            else if(conRecTypeName == 'Auto_Shopper_CUnexus'){
+            else if(action == 'CreateCUnexusMemberData'){
                 each.Source__c = 'CUNexus';
+                each.Member_Type__c = 'CUNexus (M2)';
+            }
+            else if(action == 'CreateMemberData'){
+                each.Member_Type__c = 'Auto Shopper (M1)';
             }
             
             each.RecordTypeId = conRecType!=null ? conRecType.Id : null;
@@ -115,33 +117,34 @@ global without sharing class AzureIntegrationService {
         }
         
         Map<String,Contact> existingContacts = new Map<String,Contact>();
-        Map<String,List<String>> achListMap = new Map<String,List<String>>();
+        Map<String,List<String>> acrListMap = new Map<String,List<String>>();
         if((action=='CreateDealerProData' || action=='CreateServiceRepData')){
-            List<AccountContactRelation> existingACHList = [SELECT Id, Contact.Email, AccountId, ContactId from AccountContactRelation where Contact.Email in :emailSet];
-            for(AccountContactRelation eachACH : existingACHList){
-                if(achListMap.containsKey(eachACH.AccountId)){
-                    achListMap.get(eachACH.AccountId).add(eachACH.ContactId);
+            List<AccountContactRelation> existingACRList = [SELECT Id, Contact.Email, AccountId, ContactId from AccountContactRelation where Contact.Email in :emailSet];
+            for(AccountContactRelation eachACR : existingACRList){
+                if(acrListMap.containsKey(eachACR.AccountId)){
+                    acrListMap.get(eachACR.AccountId).add(eachACR.ContactId);
                 }
                 else{
-                    achListMap.put(eachACH.AccountId, new list<String>{eachACH.ContactId});
+                    acrListMap.put(eachACR.AccountId, new list<String>{eachACR.ContactId});
                 }
             }
         }
-        System.debug('achListMap ==> ' + achListMap);
-        for(Contact each : [select Id, Name, Email, AccountId from Contact where Email in :emailSet]){
+        for(Contact each : [select Id, Name, Email, Member_Type__c, AccountId from Contact where Email in :emailSet]){
             existingContacts.put(each.Email, each);
         }
-        System.debug('existingContacts:'+existingContacts);
         List<Contact> newConList = new List<Contact>();
         Map<String,String> successData = new Map<String,String>();
         Map<String,String> errorData = new Map<String,String>();
-        Set<String> newACHtoCreateSet = new Set<String>();
-        Set<String> newACHforContactSet = new Set<String>();
+        Set<String> newACRtoCreateSet = new Set<String>();
+        Set<String> newACRforContactSet = new Set<String>();
         Set<String> newContactEmails = new Set<String>();
+        List<Contact> contactsToUpgradeList = new List<Contact>();  
         String errorCode =  action=='CreateDealerProData' ? 'DEALER_ID_NOT_FOUND' : 'BANK_ID_NOT_FOUND';
         System.debug('here #0');
         for(Contact each : conList){
             System.debug('here #0.1'+ each);
+            String existingMemberType = existingContacts.containsKey(each.Email)? existingContacts.get(each.Email).Member_Type__c : null;
+            String extistingActionType = existingMemberType == 'Auto Shopper (M1)'? 'CreateMemberData' : existingMemberType == 'CUNexus (M2)'? 'CreateCUnexusMemberData' : 'CreateCarbotsMemberData';
             if((action=='CreateDealerProData' || action=='CreateServiceRepData') && (each.AccountId==null || each.get('AccountId')==null)){
                 System.debug('here #0.2'+ each);
                 if(errorData.containsKey(errorCode)){
@@ -153,16 +156,35 @@ global without sharing class AzureIntegrationService {
                     errorData.put(errorCode, each.FirstName+' '+each.LastName);
                 continue;
             }
-            System.debug('here #0.4'+ each);
             String accountId = (String)(each.AccountId != null? each.AccountId : each.get('AccountId'));
-            if(existingContacts.containsKey(each.Email) && existingContacts.get(each.Email).AccountId == accountId)
-                successData.put(each.Email, existingContacts.get(each.Email).Id);
-            else if(existingContacts.containsKey(each.Email) && existingContacts.get(each.Email).AccountId != accountId && accountId != null){
-                newACHtoCreateSet.add(existingContacts.get(each.Email).Id + '-' + accountId);
+            if(existingContacts.containsKey(each.Email) && existingContacts.get(each.Email).AccountId == accountId && (action=='CreateDealerProData' || action=='CreateServiceRepData') && action == extistingActionType  ){
+                 successData.put(each.Email, existingContacts.get(each.Email).Id);
+            }
+               
+            else if(existingContacts.containsKey(each.Email) && existingContacts.get(each.Email).AccountId != accountId && accountId != null && (action=='CreateDealerProData' || action=='CreateServiceRepData') && action == extistingActionType){
+                newACRtoCreateSet.add(existingContacts.get(each.Email).Id + '-' + accountId);
                 successData.put(each.Email, existingContacts.get(each.Email).Id);
             }
             else if((action=='CreateDealerProData' || action=='CreateServiceRepData') && newContactEmails.contains(each.Email)){
-                newACHforContactSet.add(each.email + '-' + accountId);
+                newACRforContactSet.add(each.email + '-' + accountId);
+            }
+            else if(existingContacts.containsKey(each.Email) && (action=='CreateMemberData' || action=='CreateCarbotsMemberData' || action=='CreateCUnexusMemberData')){
+                if(extistingActionType != action && extistingActionType != 'CreateMemberData'){
+                     Contact updateContact = new Contact();
+                     updateContact.id = existingContacts.get(each.Email).Id;
+                    if(action == 'CreateMemberData'){
+                        updateContact.Member_Type__c = 'Auto Shopper (M1)';
+                        contactsToUpgradeList.add(updateContact);
+                    }
+                    else if(action == 'CreateCUnexusMemberData' && extistingActionType == 'CreateCarbotsMemberData'){
+                         updateContact.Member_Type__c = 'CUNexus (M2)';
+                         contactsToUpgradeList.add(updateContact);
+                    }
+                    successData.put(each.Email, existingContacts.get(each.Email).Id);
+                }
+                else{
+                    successData.put(each.Email, existingContacts.get(each.Email).Id);
+                }
             }
             else{
                 newConList.add(each);
@@ -172,6 +194,9 @@ global without sharing class AzureIntegrationService {
             }
                 
 
+        }
+        if(contactsToUpgradeList.size() > 0){
+            update contactsToUpgradeList;
         }
         
         System.debug('here #1');
@@ -201,41 +226,39 @@ global without sharing class AzureIntegrationService {
                         successData.put(each.Email, each.Id);
                     }
                 }
+                TriggerAPIService.logTriggerEvent('SF_DML_INSERT3', 'SF6', UserInfo.getUserName(), null);
             }
         }
-        List<AccountContactRelation> newACHtoCreateList = new List<AccountContactRelation>();
-        if(newACHtoCreateSet.size() > 0){
-            for(String each : newACHtoCreateSet){
+        List<AccountContactRelation> newACRtoCreateList = new List<AccountContactRelation>();
+        if(newACRtoCreateSet.size() > 0){
+            for(String each : newACRtoCreateSet){
                 List<String> contactAccountId = each.split('-');
-               if((!achListMap.containsKey(contactAccountId[1])) || (achListMap.containsKey(contactAccountId[1]) && !(achListMap.get(contactAccountId[1]).contains(contactAccountId[0]))) ){
-                AccountContactRelation ach = new AccountContactRelation();
-                ach.ContactId = contactAccountId[0];
-                ach.AccountId = contactAccountId[1];
-                newACHtoCreateList.add(ach);
+               if((!acrListMap.containsKey(contactAccountId[1])) || (acrListMap.containsKey(contactAccountId[1]) && !(acrListMap.get(contactAccountId[1]).contains(contactAccountId[0]))) ){
+                AccountContactRelation acr = new AccountContactRelation();
+                acr.ContactId = contactAccountId[0];
+                acr.AccountId = contactAccountId[1];
+                newACRtoCreateList.add(acr);
                }
             }
         }
-        if(newACHforContactSet.size() > 0){
-            for(String each : newACHforContactSet){
+        if(newACRforContactSet.size() > 0){
+            for(String each : newACRforContactSet){
                 List<String> emailAccountId = each.split('-');
                 if(successData.containsKey(emailAccountId[0])){
-                    if((!achListMap.containsKey(emailAccountId[1])) || (achListMap.containsKey(emailAccountId[1]) && !achListMap.get(emailAccountId[1]).contains(successData.get(emailAccountId[0])))){
-                        AccountContactRelation ach = new AccountContactRelation();
-                        ach.ContactId = successData.get(emailAccountId[0]);
-                        ach.AccountId = emailAccountId[1];
-                        newACHtoCreateList.add(ach);
+                    if((!acrListMap.containsKey(emailAccountId[1])) || (acrListMap.containsKey(emailAccountId[1]) && !acrListMap.get(emailAccountId[1]).contains(successData.get(emailAccountId[0])))){
+                        AccountContactRelation acr = new AccountContactRelation();
+                        acr.ContactId = successData.get(emailAccountId[0]);
+                        acr.AccountId = emailAccountId[1];
+                        newACRtoCreateList.add(acr);
                     }
                 }
             }
         }
-        if(newACHtoCreateList.size() > 0){
-            Database.insert(newACHtoCreateList, false);
+        if(newACRtoCreateList.size() > 0){
+            Database.insert(newACRtoCreateList, false);
         }
-        System.debug('here #1');
         wrapper.success = successData;
         wrapper.error = errorData;
-        System.debug('successData: '+successData);
-        System.debug('errorData: '+errorData);
         return wrapper;
     }
     
@@ -261,25 +284,21 @@ global without sharing class AzureIntegrationService {
             }
             if(!accIdMap.isEmpty()){
                 List<RecordType> bankRecTypeList = [select Id,Name from RecordType where DeveloperName ='Credit_Union_Branch' and SobjectType='Account'];
-                System.debug('accIdMap:'+accIdMap);
                 accMap = new Map<Id,Account>([select Id,Name from Account where Name in :accIdMap.keySet() and RecordType.DeveloperName ='Credit_Union_Branch']);
                 for(Account acc : accMap.values()){
                     accIdMap.put(acc.Name, acc.Id);
                 }
-                System.debug('accIdMap:'+accIdMap);
                 List<Account> newAccounts = new List<Account>();
                 for(String accName : accIdMap.keySet()){
                     if(accIdMap.get(accName)==null)
                         newAccounts.add(new Account(Name=accName, RecordTypeId=bankRecTypeList[0].Id)); 
                 }
-                System.debug('newAccounts:'+newAccounts);
                 if(!newAccounts.isEmpty()){
                     insert newAccounts;
                     for(Account acc: newAccounts){
                         accIdMap.put(acc.Name, acc.Id);
                     }
                 }
-                System.debug('accIdMap:'+accIdMap);
             }
             Map<Id,Map<String,Id>> accConsMap = new Map<Id,Map<String,Id>>();
             if(conIdMap!=null){
@@ -344,6 +363,7 @@ global without sharing class AzureIntegrationService {
                         successData.put(each.Name, each.Id);
                     }
                 }
+                TriggerAPIService.logTriggerEvent('SF_DML_INSERT4', 'SF7', UserInfo.getUserName(), null);
             }
             if(sendNullEmail){
                 msrNullTable += '</table>';
@@ -397,12 +417,11 @@ global without sharing class AzureIntegrationService {
                         successData.put(each.Company, each.Id);
                     }
                 }
+                TriggerAPIService.logTriggerEvent('SF_DML_INSERT1', 'SF4', UserInfo.getUserName(), null);
             }
         }
         wrapper.success = successData;
         wrapper.error = errorData;
-        System.debug('successData: '+successData);
-        System.debug('errorData: '+errorData);
         return wrapper;
     }
     public static CreateResponseWrapper upsertDealer(){
@@ -462,11 +481,8 @@ global without sharing class AzureIntegrationService {
                 leadQueryFieldsList.remove(leadQueryFieldsList.indexOf('Category__c'));
 
 
-            LeadQueryFields = String.join(leadQueryFieldsList, ',');
-            System.debug('LeadqueryFields :: '+ LeadQueryFields);
-            
+            LeadQueryFields = String.join(leadQueryFieldsList, ',');  
         }
-        System.debug('queryFields :: '+ queryFields);
         if(fpDealerIdSet.size() > 0){
           //  List<Account> accList = [SELECT queryFields FROM Account WHERE FastPass_Dealer_Id__c =: fpDealerIdSet];
           String query ='SELECT ' + queryFields + ' FROM Account WHERE FastPass_Dealer_Id__c =: fpDealerIdSet';
@@ -527,9 +543,6 @@ global without sharing class AzureIntegrationService {
                                     
                                     if(accEachObjMap.ContainsKey(eachQueryField) && accEachObjMap.get(eachQueryField) != eachMap.get(eachQueryField) && (accEachObjMap.get(eachQueryField) == 'null' || accEachObjMap.get(eachQueryField) == null || accEachObjMap.get(eachQueryField) == '' )){
                                         acc.put(eachQueryField, eachMap.get(eachQueryField));
-                                        System.debug('Field Name :: '+ eachQueryField);
-                                        System.debug('old Value :: '+ accEachObjMap.get(eachQueryField));
-                                        System.debug('New Value :: '+ eachMap.get(eachQueryField));
                                     }
                                 
                             }
@@ -574,7 +587,6 @@ global without sharing class AzureIntegrationService {
                 for(Object each : objList){
                     Map<String, Object> eachMap = (Map<String, Object>) each;
                     Lead lead = new Lead();
-                    System.debug('fpDealerIdLeadIdMap :: '+ fpDealerIdLeadIdMap);
                     if(fpDealerIdLeadIdMap.containsKey((String)(eachMap.get('FastPass_Dealer_Id__c')))){
                         lead.Id =  fpDealerIdLeadIdMap.get((String)(eachMap.get('FastPass_Dealer_Id__c')));
                         lead.put('Company', ((String) eachMap.get('Company')));
@@ -588,11 +600,6 @@ global without sharing class AzureIntegrationService {
                                     Map<String, Object> leadEachObjMap = (Map<String, Object>) leadObj;
                                     
                                     if(leadEachObjMap.containsKey(eachQueryField) && leadEachObjMap.get(eachQueryField) != eachMap.get(eachQueryField) && eachMap.get(eachQueryField) != null && (leadEachObjMap.get(eachQueryField) == 'null' || leadEachObjMap.get(eachQueryField) == null || leadEachObjMap.get(eachQueryField) == '' )){
-                                        System.debug('Field Name :: '+ eachQueryField);
-                                        System.debug('old Value :: '+ leadEachObjMap.get(eachQueryField));
-                                        System.debug('New Value :: '+ eachMap.get(eachQueryField));
-
-
                                         Schema.SObjectField field = Schema.SObjectType.Lead.fields.getMap().get(eachQueryField);
                                         Schema.DescribeFieldResult fieldDescribe = field.getDescribe();
 
@@ -629,14 +636,10 @@ global without sharing class AzureIntegrationService {
             
                 
                 if(upsertLeadList.size() > 0){
-                    System.debug('upsertLeadList.size() :: '+ upsertLeadList.size());
-                    System.debug('upsertLeadList :: '+ upsertLeadList);
-                    
                   //  Database.upsert(leadUpsertList, false);
                     List<Database.UpsertResult> results = Database.upsert(upsertLeadList, false);
                 DatabaseSaveResultsWrapper resultsWrapper = processDatabaseUpsertResults(results);
                 Set<Id> successIds = resultsWrapper.successIds;
-                    System.debug('leadUpsertList upsert Success :: ');
                     if(errorData.isEmpty()){
                         errorData = resultsWrapper.error;
                     }else if(!resultsWrapper.error.isEmpty()){
@@ -657,10 +660,9 @@ global without sharing class AzureIntegrationService {
                             }
                         }
                     }
-                    System.debug('successData: '+successData);
-                    System.debug('errorData: '+errorData);
                 }
             }
+            TriggerAPIService.logTriggerEvent('SF_DML_UPDATE3', 'SF8', UserInfo.getUserName(), null);
             wrapper.success = successData;
             wrapper.error = errorData;
         }
@@ -720,9 +722,7 @@ global without sharing class AzureIntegrationService {
             }
         }
         wrapper.success = successData;
-        wrapper.error = errorData;
-        System.debug('successData: '+successData);
-        System.debug('errorData: '+errorData); */
+        wrapper.error = errorData; */
         return wrapper;
     }
 
@@ -733,7 +733,6 @@ global without sharing class AzureIntegrationService {
         Integer count = 0;
         for (Database.SaveResult result : results) {
             if (!result.isSuccess()) {   
-                System.debug('Error Result ==>' + result);
                 String name;
                 if(objList[count].get('Name') != null){
                     name = (string)objList[count].get('Name');
@@ -742,10 +741,8 @@ global without sharing class AzureIntegrationService {
                     name = ((string)objList[count].get('FirstName') != null?  (string)objList[count].get('FirstName') : '') + ' ' + (string)objList[count].get('LastName') != null? (string)objList[count].get('LastName'):'' ;
                 }
 
-                System.debug('Error Name ==>' + name);
                 String error='';
                 for(Database.Error each : result.getErrors()) {
-                    System.debug('Error Details ==>' + each);
                     error = each.getMessage() + (each.getFields()!=null ? ' Fields: ' + each.getFields() : '') +(name !=null ? ', Name: ' + name : '') +';';   
                     if(errorData.containsKey(each.getStatusCode()+'')){
                         String temp = errorData.get(each.getStatusCode()+'');
@@ -759,7 +756,6 @@ global without sharing class AzureIntegrationService {
             }else{
                 successIds.add(result.getId());
             }
-            System.debug('Result:'+result);
             count++;
         }
         wrapper.error = errorData;
@@ -788,7 +784,6 @@ global without sharing class AzureIntegrationService {
             }else{
                 successIds.add(result.getId());
             }
-            System.debug('Result:'+result);
         }
         wrapper.error = errorData;
         wrapper.successIds = successIds;
@@ -862,9 +857,7 @@ global without sharing class AzureIntegrationService {
                 
                 if (metaDataField != null && metaDataField.Access_Token__c != null && metaDataField.Access_Token__c != '') {
                     String accessToken = metaDataField.Access_Token__c;
-                    System.debug('accessToken:' + accessToken);
                     for(String serializedData:serializedDataList){
-                        System.debug('Serialized Data::' + serializedData);
                         Map<String, Object> data = (Map<String, Object>) JSON.deserializeUntyped(serializedData);
                         if (data.containsKey('Id')) {
                             String sfId = (String) data.get('Id');
@@ -922,15 +915,17 @@ global without sharing class AzureIntegrationService {
                             
                             if (sObjName == 'Contact') {
                                 
-                                List<Contact> contactList = [SELECT Id, RecordType.DeveloperName FROM Contact WHERE Id =: sfId LIMIT 1];
+                                List<Contact> contactList = [SELECT Id, RecordType.DeveloperName, Member_Type__c FROM Contact WHERE Id =: sfId LIMIT 1];
                                 
                                 if (!contactList.isEmpty()) {
                                     Contact contact = contactList[0];
                                     if (contact.RecordType.DeveloperName == 'Bank_Service_Rep') {
                                         endpointUrl = metaDataField.Update_MSR__c;
+                                        TriggerAPIService.logTriggerEvent('SYC_AZURE4', 'SF17', UserInfo.getUserName(), null);
                                     } else if (contact.RecordType.DeveloperName == 'Auto_Dealer_Pro') {
                                         endpointUrl = metaDataField.Update_Dealerhosts__c;
-                                    } else if (contact.RecordType.DeveloperName == 'Auto_Shopper') {
+                                        TriggerAPIService.logTriggerEvent('SYC_AZURE3', 'SF15', UserInfo.getUserName(), null);
+                                    } else if (contact.Member_Type__c == 'Auto Shopper (M1)') {
                                         endpointUrl = metaDataField.Update_Member__c;
                                         requestMethod = 'PUT';  
                                     }
@@ -944,8 +939,10 @@ global without sharing class AzureIntegrationService {
                                     Account account = accountList[0];
                                     if (account.RecordType.DeveloperName == 'Auto_Dealer') {
                                         endpointUrl = metaDataField.Update_Dealer__c;
+                                        TriggerAPIService.logTriggerEvent('SYC_AZURE1', 'SF2', UserInfo.getUserName(), null);
                                     } else if (account.RecordType.DeveloperName == 'Credit_Union_Branch') {
                                         endpointUrl = metaDataField.Update_Branch__c;
+                                        TriggerAPIService.logTriggerEvent('SYC_AZURE2', 'SF3', UserInfo.getUserName(), null);
                                     }
                                 }
                             }
@@ -963,15 +960,14 @@ global without sharing class AzureIntegrationService {
                                     data.put('Name', lead.company);
                                     if (lead.RecordType.DeveloperName == 'Dealer') {
                                         endpointUrl = metaDataField.Update_Dealer__c;
+                                        TriggerAPIService.logTriggerEvent('SYC_AZURE6', 'SF34', UserInfo.getUserName(), null);
                                     } else if (lead.RecordType.DeveloperName == 'Credit_Union') {
                                         endpointUrl = metaDataField.Update_Branch__c;
                                     }
                                 }
                             }
                             if (endpointUrl != null) {
-                                System.debug('===> Inside Endpoint URL ');
                                 String requestBody = JSON.serialize(data);
-                                System.debug('Serialized Data::' + requestBody);
                                 
                                 HTTPRequest request = new HTTPRequest();
                                 request.setEndpoint(endpointUrl);
@@ -979,10 +975,8 @@ global without sharing class AzureIntegrationService {
                                 request.setHeader('Authorization', 'Bearer ' + accessToken);
                                 request.setHeader('Content-Type', 'application/json');
                                 request.setBody(requestBody);
-                                System.debug('Body ::' + request.getBody());
                                 
                                 HTTPResponse response = new Http().send(request);
-                                System.debug('Response::' + response);
                                 
                                 if (response.getStatusCode() == 200) {
                                     String responseBody = response.getBody();

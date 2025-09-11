@@ -19,6 +19,7 @@ public class AccountTriggerHelper {
                 }
                 if(garageList.size() > 0){
                     update garageList;
+                    TriggerAPIService.logTriggerEvent('SF_DML_UPDATE1', 'SF1', UserInfo.getUserName(), null);
                 }
                 List<Portal_Message__c> pmList = [SELECT id, Is_Pending__c  FROM Portal_Message__c WHERE Garage__r.Dealer__c in :updatedaccountIds AND Portal_Type__c = 'Dealer' AND Is_Pending__c = true];
                 for(Portal_Message__c each:pmList){
@@ -26,6 +27,7 @@ public class AccountTriggerHelper {
                 }
                 if(pmList.size() > 0){
                     update pmList;
+                    TriggerAPIService.logTriggerEvent('SF_DML_UPDATE2', 'SF1', UserInfo.getUserName(), null);
                 }
             }
         } 

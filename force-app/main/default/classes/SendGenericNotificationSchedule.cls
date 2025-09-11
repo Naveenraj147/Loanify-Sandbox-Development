@@ -30,12 +30,14 @@ public class SendGenericNotificationSchedule implements Schedulable {
             
                 if(emailList.size() > 0){
                     Messaging.sendEmail(emailList);
+                    TriggerAPIService.logTriggerEvent('MSG_EMAIL_MBR10', 'SF38', UserInfo.getUserName(), null);
                 }
                 if(contactIds.size() > 0 && messageTemplate.size() > 0){
                     String smsTemplateId = messageTemplate[0].Id;
                     for(String eachConId : contactIds){
                         tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId('Member_Mobile__c', smsTemplateId ,eachConId);
                     }
+                    TriggerAPIService.logTriggerEvent('MSG_TXT_MBR11', 'SF38', UserInfo.getUserName(), null);
                 }
                 update garages;
             }

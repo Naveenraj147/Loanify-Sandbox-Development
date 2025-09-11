@@ -102,7 +102,7 @@ global class ChatPortalController {
                     ApexPages.addmessage(new ApexPages.message(ApexPages.severity.WARNING,'Link Expired'));
                 }
                 if(opportunityId != null && opportunityId != ''){
-                    opportunity = [SELECT Id, Name, Auto_Shopper__r.Name, Auto_Shopper__r.Email, Branch__c, Bank_Service_Rep_Name_MSR__c, Branch__r.ParentId, Auto_Shopper__r.RecordTypeId, Card_Number__c FROM Opportunity where Id=:opportunityId];
+                    opportunity = [SELECT Id, Name, Auto_Shopper__r.Name, Auto_Shopper__r.Email, Branch__c, Bank_Service_Rep_Name_MSR__c, Branch__r.ParentId, Auto_Shopper__r.RecordTypeId, Card_Number__c, Auto_Shopper__r.Member_Type__c FROM Opportunity where Id=:opportunityId];
                     memberName =  opportunity != null? opportunity.Auto_Shopper__r.Name:'Member';
                     memberEmail = opportunity != null? opportunity.Auto_Shopper__r.Email:null;
                     loadsenderOptions();
@@ -428,6 +428,8 @@ global class ChatPortalController {
         newMessage = NO_TEMPLATE;
         sendMessage();
         callAINegotiationWebhook(String.valueOf(fastpassDealerId), null, null );
+        TriggerAPIService.logTriggerEvent('SF_WEBHOOK5', 'SF14', UserInfo.getUserName(), null);
+        
         // Set showButtons to false after sending to hide buttons and show textarea for next message
         showButtons = false;
         // Ensure price input is hidden
@@ -450,16 +452,28 @@ global class ChatPortalController {
 
             if(portalType == 'MSR' || portalType == 'Advisor' ){
                 newPM.Portal_Type__c = portalType;
+                if(portalType == 'MSR'){
+                    TriggerAPIService.logTriggerEvent('SF_DML_INSERT8', 'SF10', UserInfo.getUserName(), null);
+                }
+                else{
+                    TriggerAPIService.logTriggerEvent('SF_DML_INSERT9', 'SF11', UserInfo.getUserName(), null);
+                }
                 if(opportunity != null){
                     String chatType = portalType == 'MSR' ? 'askMSR' : 'askAdvisor';
                     callFastPassWebhook(null, opportunity.Card_Number__c ,chatType);
+                    if(chatType == 'askMSR'){
+                        TriggerAPIService.logTriggerEvent('SF_WEBHOOK2', 'SF10', UserInfo.getUserName(), null);
+                    }
+                    else{
+                        TriggerAPIService.logTriggerEvent('SF_WEBHOOK3', 'SF11', UserInfo.getUserName(), null);
+                    }
                 }
                
             }
 
             else if(portalType == 'Dealer' || portalType == 'Carbots'){
                 String recordTypeId = Schema.getGlobalDescribe().get('Contact').getDescribe().getRecordTypeInfosByDeveloperName().get('Auto_Shopper_Carbots').getRecordTypeId();
-                newPM.Portal_Type__c = opportunity.Auto_Shopper__r.RecordTypeId == recordTypeId? 'Carbots' : 'Dealer';
+                newPM.Portal_Type__c = opportunity.Auto_Shopper__r.Member_Type__c == 'Carbots (M3)'? 'Carbots' : 'Dealer';
                 newPM.Garage__c = garageId;
                 //newPM.Sender_Email__c = nameEmailMap.get(selectedSender);
                 String chatLink;
@@ -480,8 +494,10 @@ global class ChatPortalController {
                         }
 
                         Update garageUpdate;
+                        TriggerAPIService.logTriggerEvent('SF_DML_UPDATE4', 'SF9', UserInfo.getUserName(), null);
                         if(chatLink != null){
                             callFastPassWebhook(chatLink, null ,'ask_dealer');
+                            TriggerAPIService.logTriggerEvent('SF_WEBHOOK1', 'SF9', UserInfo.getUserName(), null);
                         }
                         if((memberMsgCount == 1 && (dealerMsgCount == null || dealerMsgCount == 0) ) || memberMsgCount > 1 && Garage[0].Is_Vehicle_In_Top_List__c == true){ 
                             System.debug('Before Send SMS ');
@@ -490,6 +506,7 @@ global class ChatPortalController {
                         }
                     }
                 }
+                TriggerAPIService.logTriggerEvent('SF_DML_INSERT7', 'SF9', UserInfo.getUserName(), null);
             }
             insert newPM;
         }
@@ -571,6 +588,7 @@ global class ChatPortalController {
                 // Process the response
                 if (response.getStatusCode() == 200 || response.getStatusCode() == 204) {
                     System.debug('Callout successful. Response: ' + response.getBody());
+                    TriggerAPIService.logTriggerEvent('MSG_TXT_MBR2', 'SF9', UserInfo.getUserName(), null);
                 } 
                 else {
                     System.debug('Callout failed with status: ' + response.getStatus());
@@ -613,9 +631,11 @@ global class ChatPortalController {
                         Id = garageId,
                         Outdoor_Price__c = outTheDoorPrice,
                         OTD_Provided_Date__c = system.today(),
-                        Status__c = 'OTD$ Provided'
+                        Status__c = 'OTD$ Provided',
+                        OTD_Provided_Dealer_Pro_Name__c = emailNameMap.ContainsKey(selectedSender)? emailNameMap.get(selectedSender) : null
                     );
                     update garage;
+                    TriggerAPIService.logTriggerEvent('SF_DML_UPDATE5', 'SF12', UserInfo.getUserName(), null);
                     System.debug('Updated Garage record with out-the-door price: ' + outTheDoorPrice);
                     
                     // After successful update, call the webhook
@@ -625,6 +645,7 @@ global class ChatPortalController {
                         if (updatedGarage != null && updatedGarage.FastPass_Vehicle_Id__c != null) {
                             // Call the webhook asynchronously
                             callAINegotiationWebhook(String.valueOf(updatedGarage.FastPass_Vehicle_Id__c), updatedGarage.Outdoor_Price__c, updatedGarage.Chat_Id__c);
+                            TriggerAPIService.logTriggerEvent('SF_WEBHOOK4', 'SF12', UserInfo.getUserName(), null);
                         }
                     }
                 }

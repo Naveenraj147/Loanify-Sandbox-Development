@@ -36,6 +36,7 @@ public without sharing class UnsubscribeComponentController {
                     }
                 }
             }
+            TriggerAPIService.logTriggerEvent('SF_DML_UPDATE12', 'SF39', UserInfo.getUserName(), null);
             return 'Success';
         
         } catch (Exception e) {

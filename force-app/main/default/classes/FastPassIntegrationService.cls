@@ -70,7 +70,7 @@ global with sharing class FastPassIntegrationService {
                     wrapper.error = new Map<String, String>{'Message' => 'Could not find a match for RequestType'};
                     sendErrorEmail('Failed to ' + requestType, JSON.serialize(wrapper.error));
                 }
-                if (!(requestType == 'topFiveList' || requestType == 'updateDownPayment'|| requestType == 'sendLoanAcceptedEmail')){
+                if (!(requestType == 'topFiveList' || requestType == 'updateDownPayment' || requestType == 'sendLoanAcceptedEmail')){ 
                     System.debug('Inside responseList adding ==> '+ jsonResponse);
                     responseList.add(wrapper);
                 }
@@ -152,7 +152,7 @@ global with sharing class FastPassIntegrationService {
             }
             
             
-            List<Opportunity> oppList = [SELECT Id, Name, Card_Number__c, Auto_Shopper__r.FirstName, Auto_Shopper__r.RecordType.DeveloperName FROM Opportunity WHERE Card_Number__c =: memberLoanId LIMIT 1];
+            List<Opportunity> oppList = [SELECT Id, Name, Card_Number__c, Auto_Shopper__r.FirstName, Auto_Shopper__r.RecordType.DeveloperName, Auto_Shopper__r.Member_Type__c FROM Opportunity WHERE Card_Number__c =: memberLoanId LIMIT 1];
             SuccesWrapper wrapp = new SuccesWrapper();
             Garage__c garageRecord;
             if(oppList.size() > 0 ){
@@ -188,8 +188,9 @@ global with sharing class FastPassIntegrationService {
                     
                     garageRecord = createGarageRecord(dealerMarketcheckId, opp.Id, modelYear, vehicleVIN, vehicleName, accList, conList, fastpassVehicleId, make, model, stockNumber, price, leadList, chatId );
                     sendNotification('New Vehicle Added', opp.Auto_Shopper__r.FirstName+ ' added a new vehicle 🚘 to the garage', garageRecord.Id, null);
+                    TriggerAPIService.logTriggerEvent('MSG_BELL_NOTIFICATION2', 'SF21', UserInfo.getUserName(), null);
                 }
-                if(opp.Auto_Shopper__r.RecordType.DeveloperName == 'Auto_Shopper_Carbots'){
+                if(opp.Auto_Shopper__r.Member_Type__c == 'Carbots (M3)'){
                     String dealerportalURL = system.label.Dealer_Portal_Page_URL;
                     // Create JSON object
                     Map<String, Object> params = new Map<String, Object>();
@@ -211,7 +212,7 @@ global with sharing class FastPassIntegrationService {
                 
                 
                 wrapp.message = 'Vehicle successfully added into Garage';
-                 
+                 TriggerAPIService.logTriggerEvent('SF_DML_INSERT11', 'SF21', UserInfo.getUserName(), null);
                 wrapp.data = new List<CreateResponseWrapperSuccess>();
                 wrapper.success = wrapp;
                 wrapper.error = new Map<String, String>{};
@@ -347,7 +348,7 @@ global with sharing class FastPassIntegrationService {
                     wrapper.success = new SuccesWrapper();
                 sendErrorEmail('failed to process vehicleRemovalInGarage.', 'No matching opportunity found for the provided LoanId.<br/>Request Type: vehicleRemovalInGarage<br/> FastpassVehicleId: '+fastpassVehicleId+'LoanId: '+memberLoanId);
             }
-            
+            TriggerAPIService.logTriggerEvent('SF_DML_UPDATE7', 'SF22', UserInfo.getUserName(), null);
             return wrapper;
         }
         catch(Exception e){
@@ -621,13 +622,16 @@ global with sharing class FastPassIntegrationService {
                 updateGarage.Scheduled_Test_Drive_Datetime__c = testDriveDT;
                 updateGarage.TD_Scheduled_Date__c = system.today();
                 updateGarage.Status__c = 'Lead Waiting';
+                TriggerAPIService.logTriggerEvent('SF_DML_INSERT12', 'SF23', UserInfo.getUserName(), null);
 
             }
             insert portalMessage;
+            TriggerAPIService.logTriggerEvent('SF_DML_UPDATE8', 'SF24', UserInfo.getUserName(), null);
             String dealerName = acc!= null? acc.Name : lead != null? lead.Company : '';
             String body = '🏬 '+ dealerName + ' \n 🚘 '+ garage.Name; 
             String title = 'New message from '+ (opp.Auto_Shopper__r.FirstName);
             FastPassIntegrationService.sendNotification(title, body, garage.Id, null);
+            TriggerAPIService.logTriggerEvent('MSG_BELL_NOTIFICATION3', 'SF23', UserInfo.getUserName(), null);
             updateGarage.Id = garage.Id;
             updateGarage.Last_Member_Response_Test_Drive__c = System.now();
             if(garage.Send_Generic_Notification__c == true){
@@ -637,6 +641,7 @@ global with sharing class FastPassIntegrationService {
                 updateGarage.Chat_Id__c = chatId;
             }
             update updateGarage;
+             TriggerAPIService.logTriggerEvent('SF_DML_UPDATE21', 'SF23', UserInfo.getUserName(), null);
 
             SuccesWrapper wrapp = new SuccesWrapper();
                 wrapp.message = 'Ask Dealer request sent successfully';
@@ -825,6 +830,9 @@ global with sharing class FastPassIntegrationService {
             }
             insert portalMessage;
 
+            String triggerName = portalType == 'Advisor'? 'SF_DML_INSERT14' : 'SF_DML_INSERT13';
+            String triggerId = portalType == 'Advisor'? 'SF26' : 'SF25';
+            TriggerAPIService.logTriggerEvent(triggerName, triggerId, UserInfo.getUserName(), null);
 
             SuccesWrapper wrapp = new SuccesWrapper();
             String successMessage = portalType == 'Advisor'? 'Advisor Member Message request sent successfully': 'MSR Member Message request sent successfully';
@@ -1003,6 +1011,9 @@ global with sharing class FastPassIntegrationService {
             wrapp.chatId = chatId;
             wrapper.success = wrapp;
             wrapper.error = new Map<String, String>{};
+            String triggerName = PortalType == 'Dealer'? 'API_REQ_FP1' : PortalType == 'Advisor'? 'API_REQ_FP3' : 'API_REQ_FP2' ;
+            String triggerId =PortalType == 'Dealer'? 'SF28' : PortalType == 'Advisor'? 'SF30' : 'SF29' ;
+            TriggerAPIService.logTriggerEvent(triggerName, triggerId, UserInfo.getUserName(), null);
                 return wrapper;
             
         }catch(Exception e){
@@ -1173,9 +1184,10 @@ global with sharing class FastPassIntegrationService {
         }
         if(garageListToUpdate.size() > 0){
             update garageListToUpdate;
+            TriggerAPIService.logTriggerEvent('SF_DML_UPDATE9', 'SF27', UserInfo.getUserName(), null);
         }
-        System.debug('Inside successList ==>'+ successList);
-        System.debug('Inside errorList ==>'+ errorList );
+        
+        TriggerAPIService.logTriggerEvent('MSG_EMAIL_DLR1 ', 'SF27', UserInfo.getUserName(), null);
         return  JSON.serialize(new Map<String, List<Map<String, String>>>{ 'error' => errorList, 'success' => successList});
     }
 
@@ -1216,6 +1228,7 @@ global with sharing class FastPassIntegrationService {
                 'Message' => 'The down payment has been updated successfully.' 
                     };
         }
+        TriggerAPIService.logTriggerEvent('SF_DML_UPDATE10', 'SF31', UserInfo.getUserName(), null);
         return  JSON.serialize((new Map<String, Map<String, String>>{ 'error' => errorList, 'success' => successList}));
 
     }
@@ -1291,6 +1304,8 @@ global with sharing class FastPassIntegrationService {
             }
             
         }
+        TriggerAPIService.logTriggerEvent('MSG_EMAIL_MSR4', 'SF32', UserInfo.getUserName(), null);
+       
         return  JSON.serialize((new Map<String, Map<String, String>>{ 'error' => errorList, 'success' => successList}));
     }
 

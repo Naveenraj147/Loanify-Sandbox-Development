@@ -64,7 +64,7 @@ global class CustomerEmailHandler implements Messaging.InboundEmailHandler {
                         emailMsg.CcAddress = ccAddr;
                     }
                     insert emailMsg;
-                    
+                    TriggerAPIService.logTriggerEvent('SF_DML_INSERT10', 'SF20', UserInfo.getUserName(), null);
                     If(email.binaryAttachments != null){
                         List<Attachment> attachments = new List<Attachment>();
                         for (Messaging.InboundEmail.BinaryAttachment attachment : email.binaryAttachments) {

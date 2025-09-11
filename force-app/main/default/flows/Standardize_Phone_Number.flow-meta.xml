@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>61.0</apiVersion>
+    <assignments>
+        <name>Assign_Output_Phone_Number</name>
+        <label>Assign Output Phone Number</label>
+        <locationX>50</locationX>
+        <locationY>350</locationY>
+        <assignmentItems>
+            <assignToReference>outPutPhoneNumber</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <elementReference>InputPhoneNumber</elementReference>
+            </value>
+        </assignmentItems>
+    </assignments>
+    <assignments>
+        <name>Format_Phone_Number</name>
+        <label>Format Phone Number</label>
+        <locationX>50</locationX>
+        <locationY>242</locationY>
+        <assignmentItems>
+            <assignToReference>InputPhoneNumber</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <elementReference>FormattedPhoneNumber</elementReference>
+            </value>
+        </assignmentItems>
+        <connector>
+            <targetReference>Assign_Output_Phone_Number</targetReference>
+        </connector>
+    </assignments>
+    <decisions>
+        <name>Check_Phone_Format</name>
+        <label>Check Phone Format</label>
+        <locationX>182</locationX>
+        <locationY>134</locationY>
+        <defaultConnectorLabel>Default Outcome</defaultConnectorLabel>
+        <rules>
+            <name>Needs_Formatting</name>
+            <conditionLogic>and</conditionLogic>
+            <conditions>
+                <leftValueReference>isPhoneNumberValid</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <booleanValue>false</booleanValue>
+                </rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Format_Phone_Number</targetReference>
+            </connector>
+            <label>Needs Formatting</label>
+        </rules>
+    </decisions>
+    <environments>Default</environments>
+    <formulas>
+        <name>FormattedPhoneNumber</name>
+        <dataType>String</dataType>
+        <expression>IF(
+    LEN(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({!InputPhoneNumber}, &quot; &quot;, &quot;&quot;), &quot;(&quot;, &quot;&quot;), &quot;)&quot;, &quot;&quot;), &quot;-&quot;, &quot;&quot;), &quot;.&quot;, &quot;&quot;), &quot;+&quot;, &quot;&quot;), &quot;/&quot;, &quot;&quot;), &quot;\\&quot;, &quot;&quot;), &quot;,&quot;, &quot;&quot;), &quot;;&quot;, &quot;&quot;)) = 10,
+    &quot;+1&quot; &amp; SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({!InputPhoneNumber}, &quot; &quot;, &quot;&quot;), &quot;(&quot;, &quot;&quot;), &quot;)&quot;, &quot;&quot;), &quot;-&quot;, &quot;&quot;), &quot;.&quot;, &quot;&quot;), &quot;+&quot;, &quot;&quot;), &quot;/&quot;, &quot;&quot;), &quot;\\&quot;, &quot;&quot;), &quot;,&quot;, &quot;&quot;), &quot;;&quot;, &quot;&quot;),
+    IF(
+        LEN(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({!InputPhoneNumber}, &quot; &quot;, &quot;&quot;), &quot;(&quot;, &quot;&quot;), &quot;)&quot;, &quot;&quot;), &quot;-&quot;, &quot;&quot;), &quot;.&quot;, &quot;&quot;), &quot;+&quot;, &quot;&quot;), &quot;/&quot;, &quot;&quot;), &quot;\\&quot;, &quot;&quot;), &quot;,&quot;, &quot;&quot;), &quot;;&quot;, &quot;&quot;)) = 11,
+        &quot;+&quot; &amp; SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE({!InputPhoneNumber}, &quot; &quot;, &quot;&quot;), &quot;(&quot;, &quot;&quot;), &quot;)&quot;, &quot;&quot;), &quot;-&quot;, &quot;&quot;), &quot;.&quot;, &quot;&quot;), &quot;+&quot;, &quot;&quot;), &quot;/&quot;, &quot;&quot;), &quot;\\&quot;, &quot;&quot;), &quot;,&quot;, &quot;&quot;), &quot;;&quot;, &quot;&quot;),
+        {!InputPhoneNumber}
+    )
+)</expression>
+    </formulas>
+    <formulas>
+        <name>isPhoneNumberValid</name>
+        <dataType>Boolean</dataType>
+        <expression>REGEX({!InputPhoneNumber}, &quot;^\\+1\\d{10}$&quot;)</expression>
+    </formulas>
+    <interviewLabel>Standardize Phone Number {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Standardize Phone Number</label>
+    <processMetadataValues>
+        <name>BuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processMetadataValues>
+        <name>CanvasMode</name>
+        <value>
+            <stringValue>AUTO_LAYOUT_CANVAS</stringValue>
+        </value>
+    </processMetadataValues>
+    <processMetadataValues>
+        <name>OriginBuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processType>AutoLaunchedFlow</processType>
+    <start>
+        <locationX>56</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>Check_Phone_Format</targetReference>
+        </connector>
+    </start>
+    <status>Obsolete</status>
+    <variables>
+        <name>InputPhoneNumber</name>
+        <dataType>String</dataType>
+        <isCollection>false</isCollection>
+        <isInput>true</isInput>
+        <isOutput>false</isOutput>
+    </variables>
+    <variables>
+        <name>outPutPhoneNumber</name>
+        <dataType>String</dataType>
+        <isCollection>false</isCollection>
+        <isInput>false</isInput>
+        <isOutput>true</isOutput>
+    </variables>
+</Flow>

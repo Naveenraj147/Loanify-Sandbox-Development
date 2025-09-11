@@ -34,30 +34,36 @@ public class OpportunityTriggerHelper {
             if(!oppIdsWithPhoneNumbers.isEmpty() || !msrUpdatedOppIds.isEmpty()  ) {
                 oppWithContactRecordTypes = new Map<Id, Opportunity>([
                     SELECT Id, Mobile__c, Phone__c, Auto_Shopper__c, 
-                           Auto_Shopper__r.RecordType.DeveloperName, FastPass_Team_SMS_Support__c
+                           Auto_Shopper__r.RecordType.DeveloperName, FastPass_Team_SMS_Support__c, Auto_Shopper__r.Member_Type__c
                     FROM Opportunity 
                     WHERE Id IN :oppIdsWithPhoneNumbers OR Id IN :msrUpdatedOppIds
                 ]);
             }
             
+            Boolean isSMSSent = false;
             // Process SMS sending with Carbots record type check
             for(Opportunity eachOpp : newOppList){
                 if(System.Label.MSR_Notifications == 'TRUE'){
                     if((eachOpp.Mobile__c != null || eachOpp.Phone__c != null) && smsTemplate != null && eachOpp.Auto_Shopper__c != null && oppWithContactRecordTypes.containsKey(eachOpp.Id)){
                         // Check if this opportunity is in our map and has the right contact record type
                         Opportunity oppWithContact = oppWithContactRecordTypes.get(eachOpp.Id);
-                        if(oppWithContact != null && oppWithContact.Auto_Shopper__r.RecordType.DeveloperName == 'Auto_Shopper_Carbots' && oppWithContact.FastPass_Team_SMS_Support__c == false) { // Send SMS ONLY to Carbot member
+                        if(oppWithContact != null && oppWithContact.Auto_Shopper__r.Member_Type__c == 'Carbots (M3)' && oppWithContact.FastPass_Team_SMS_Support__c == false) { // Send SMS ONLY to Carbot member
                             
                             String smsField = eachOpp.Mobile__c != null? 'Mobile__c' : 'Phone__c';
                             if(oldMap == null){
                                 tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId(smsField, smsTemplate.Id, eachOpp.Id);
+                                isSMSSent = true;
                             }
                             else if((eachOpp.Phone__c == null && eachOpp.Mobile__c != null && oldMap.get(eachOpp.Id).Mobile__c == null) || (eachOpp.Mobile__c == null && eachOpp.Phone__c != null && oldMap.get(eachOpp.Id).Phone__c == null) ){
                                 tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId(smsField, smsTemplate.Id, eachOpp.Id);
+                                isSMSSent = true;
                             }
                         }
                     }
                 }
+            }
+            if(isSMSSent){
+                TriggerAPIService.logTriggerEvent('MSG_TXT_MBR1', 'SF7', UserInfo.getUserName(), null);
             }
             
             if(msrUpdatedOppIds.size() > 0 && emailTemplate != null){
@@ -89,6 +95,7 @@ public class OpportunityTriggerHelper {
                 }
                 if(emailList.size() > 0){
                     Messaging.sendEmail(emailList);
+                    TriggerAPIService.logTriggerEvent('MSG_EMAIL_MSR1', 'SF37', UserInfo.getUserName(), null);
                 }
             }
         }

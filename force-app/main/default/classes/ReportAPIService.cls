@@ -138,6 +138,7 @@ global class ReportAPIService {
             
         }
         jsonString = JSON.serialize(wrapper);
+        TriggerAPIService.logTriggerEvent('API_REQ_AZURE1', 'SF42', UserInfo.getUserName(), null);
         return jsonString;
     }
     public static String getSMSOptCount(Map<String,Object> requestMap){
@@ -168,6 +169,7 @@ global class ReportAPIService {
         wrapper.error = new Map<String,String>();
         
         jsonString = JSON.serialize(wrapper);
+        TriggerAPIService.logTriggerEvent('API_REQ_AZURE2', 'SF43', UserInfo.getUserName(), null);
         return jsonString;
     }
     
@@ -212,6 +214,7 @@ global class ReportAPIService {
         wrapper.error = new Map<String,String>();
         
         jsonString = JSON.serialize(wrapper);
+        TriggerAPIService.logTriggerEvent('API_REQ_AZURE3', 'SF44', UserInfo.getUserName(), null);
         return jsonString;
     }
     
@@ -253,6 +256,7 @@ global class ReportAPIService {
         wrapper.error = new Map<String,String>();
         
         jsonString = JSON.serialize(wrapper);
+        TriggerAPIService.logTriggerEvent('API_REQ_AZURE4', 'SF45', UserInfo.getUserName(), null);
         return jsonString;
     }
     
@@ -282,6 +286,7 @@ global class ReportAPIService {
         wrapper.error = new Map<String,String>();
         
         jsonString = JSON.serialize(wrapper);
+        TriggerAPIService.logTriggerEvent('API_REQ_AZURE5', 'SF46', UserInfo.getUserName(), null);
         return jsonString;
     }
     
@@ -321,6 +326,7 @@ global class ReportAPIService {
         wrapper.error = new Map<String,String>();
         
         jsonString = JSON.serialize(wrapper);
+        TriggerAPIService.logTriggerEvent('API_REQ_AZURE6', 'SF47', UserInfo.getUserName(), null);
         return jsonString;
     }
     
@@ -395,6 +401,7 @@ global class ReportAPIService {
         public Map<String,String> error;
     }
 
+    //Method to handle get Dealership detail for Dashboard
     public static string getDealershipDetails(Map<String,Object> requestMap){
         CreateResponseWrapper wrapper = new CreateResponseWrapper();
         wrapper.error = new Map<String,String>();
@@ -464,27 +471,32 @@ global class ReportAPIService {
             }
         }        
         jsonString = JSON.serialize(wrapper);
+        TriggerAPIService.logTriggerEvent('API_REQ_AZURE7', 'SF48', UserInfo.getUserName(), null);
         return jsonString;
     }
 
+    //Method to generate the List of the garage detail undrer dealer
     public static List<Map<String,String>> getActiveGarageData(String fpdealerId){
-        List<Garage__c> activeGarageList = [SELECT Name, Opportunity__r.Card_Number__c, Opportunity__r.Name, Opportunity__r.Loan_Expiration_Date__c, Status__c, VIN__c, FastPass_Dealer_Id__c, FastPass_Vehicle_Id__c, Prospect_Waiting_Date__c, TD_Scheduled_Date__c, OTD_Provided_Date__c, Lead_Waiting_Date__c FROM Garage__c WHERE Active__c = true AND FastPass_Dealer_Id__c =:fpdealerId ];
+        List<Garage__c> activeGarageList = [SELECT Name, Opportunity__r.Card_Number__c, Opportunity__r.Name, Opportunity__r.Loan_Expiration_Date__c, Status__c, VIN__c, FastPass_Dealer_Id__c, FastPass_Vehicle_Id__c, Prospect_Waiting_Date__c, TD_Scheduled_Date__c, OTD_Provided_Date__c, Lead_Waiting_Date__c, OTD_Provided_Dealer_Pro_Name__c, Stock_Number__c, Outdoor_Price__c FROM Garage__c WHERE Active__c = true AND FastPass_Dealer_Id__c =:fpdealerId ];
         List<Map<String,String>> garageInfoList = new  List<Map<String,String>>();
         if(activeGarageList.size() > 0){
             for(Garage__c eachGarage : activeGarageList){
                 Map<String,String> tempMap = new Map<String,String>();
-                tempMap.put('Name', eachGarage.Name);
-                tempMap.put('LoanId', eachGarage.Opportunity__r.Card_Number__c);
-                tempMap.put('Status', eachGarage.Status__c);
-                tempMap.put('VehicleVIN', eachGarage.VIN__c);
-                tempMap.put('FastPassDealerId', eachGarage.FastPass_Dealer_Id__c);
-                tempMap.put('fastpassVehicleId', String.valueOf(eachGarage.FastPass_Vehicle_Id__c));
-                tempMap.put('CustomerName', eachGarage.Opportunity__r.Name);
-                tempMap.put('CloseDate', String.valueOf(eachGarage.Opportunity__r.Loan_Expiration_Date__c));
-                tempMap.put('ProspectWaitingDate', String.valueOf(eachGarage.Prospect_Waiting_Date__c));
-                tempMap.put('OTDProvidedDate', String.valueOf(eachGarage.OTD_Provided_Date__c));
-                tempMap.put('LeadWaitingDate', String.valueOf(eachGarage.Lead_Waiting_Date__c));
+               // tempMap.put('Status', eachGarage.Status__c);
+                tempMap.put('StockNumber', eachGarage.Stock_Number__c);                
                 tempMap.put('TDScheduledDate', String.valueOf(eachGarage.TD_Scheduled_Date__c));
+                tempMap.put('LeadWaitingDate', String.valueOf(eachGarage.Lead_Waiting_Date__c));
+                tempMap.put('OTDAmount', String.valueOf(eachGarage.Outdoor_Price__c));
+                tempMap.put('OTDProvidedDealerPro', eachGarage.OTD_Provided_Dealer_Pro_Name__c);
+                tempMap.put('OTDProvidedDate', String.valueOf(eachGarage.OTD_Provided_Date__c));
+                tempMap.put('ProspectWaitingDate', String.valueOf(eachGarage.Prospect_Waiting_Date__c));
+                tempMap.put('CloseDate', String.valueOf(eachGarage.Opportunity__r.Loan_Expiration_Date__c));
+                tempMap.put('CustomerName', eachGarage.Opportunity__r.Name);
+                tempMap.put('FastpassVehicleId', String.valueOf(eachGarage.FastPass_Vehicle_Id__c));
+                tempMap.put('FastPassDealerId', eachGarage.FastPass_Dealer_Id__c);               
+                tempMap.put('VehicleVIN', eachGarage.VIN__c);
+                tempMap.put('LoanId', eachGarage.Opportunity__r.Card_Number__c);
+                tempMap.put('VehicleName', eachGarage.Name);
                 garageInfoList.add(tempMap);
             }
 

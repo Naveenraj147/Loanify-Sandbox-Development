@@ -21,6 +21,7 @@ public class AccountContactRelationTriggerHelper {
                     each.Dealer_Email_Available__c = true;
                 }
                 update garageList; 
+                 TriggerAPIService.logTriggerEvent('SF_DML_UPDATE14', 'SF41', UserInfo.getUserName(), null);
             }
     
             List<Portal_Message__c> pmList = [SELECT id, Is_Pending__c  FROM Portal_Message__c 
@@ -30,6 +31,7 @@ public class AccountContactRelationTriggerHelper {
                     each.Is_Pending__c = false;
                 }
                 update pmList;
+                 TriggerAPIService.logTriggerEvent('SF_DML_UPDATE15', 'SF41', UserInfo.getUserName(), null);
     
             }
         }

@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>62.0</apiVersion>
+    <decisions>
+        <name>Check_if_All_Caps</name>
+        <label>Check if All Caps</label>
+        <locationX>182</locationX>
+        <locationY>323</locationY>
+        <defaultConnectorLabel>No</defaultConnectorLabel>
+        <rules>
+            <name>All_Caps</name>
+            <conditionLogic>and</conditionLogic>
+            <conditions>
+                <leftValueReference>$Record.Name</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <elementReference>AllCapsName</elementReference>
+                </rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Correct_Capitalization_Opp</targetReference>
+            </connector>
+            <label>Yes</label>
+        </rules>
+    </decisions>
+    <environments>Default</environments>
+    <formulas>
+        <name>AllCapsName</name>
+        <dataType>String</dataType>
+        <expression>UPPER({!$Record.Name})</expression>
+    </formulas>
+    <formulas>
+        <name>CorrectCapsFirstName</name>
+        <dataType>String</dataType>
+        <expression>CASE(
+    LEN({!$Record.Name}),
+    0, &apos;&apos;,
+    1, UPPER({!$Record.Name}),
+    UPPER(LEFT({!$Record.Name}, 1)) &amp; LOWER(MID({!$Record.Name}, 2, FIND(&apos; &apos;, {!$Record.Name}) - 1))
+)</expression>
+    </formulas>
+    <formulas>
+        <name>CorrectCapsFullName</name>
+        <dataType>String</dataType>
+        <expression>CASE(
+    LEN({!$Record.Name}),
+    0, &apos;&apos;,
+    1, UPPER({!$Record.Name}),
+    UPPER(LEFT({!$Record.Name}, 1)) &amp; LOWER(MID({!$Record.Name}, 2, FIND(&apos; &apos;, {!$Record.Name}) - 1)) &amp; 
+    IF(
+        FIND(&apos; &apos;, {!$Record.Name}) &gt; 0,
+        UPPER(MID({!$Record.Name}, FIND(&apos; &apos;, {!$Record.Name}) + 1, 1)) &amp; 
+        LOWER(MID({!$Record.Name}, FIND(&apos; &apos;, {!$Record.Name}) + 2, LEN({!$Record.Name}) - FIND(&apos; &apos;, {!$Record.Name}))),
+        &apos;&apos;
+    )
+)</expression>
+    </formulas>
+    <formulas>
+        <name>CorrectCapsLastName</name>
+        <dataType>String</dataType>
+        <expression>IF(
+    FIND(&apos; &apos;, {!$Record.Name}) &gt; 0,
+    UPPER(MID({!$Record.Name}, FIND(&apos; &apos;, {!$Record.Name}) + 1, 1)) &amp; 
+    LOWER(MID({!$Record.Name}, FIND(&apos; &apos;, {!$Record.Name}) + 2, LEN({!$Record.Name}) - FIND(&apos; &apos;, {!$Record.Name}))),
+    UPPER(LEFT({!$Record.Name}, 1)) &amp; LOWER(RIGHT({!$Record.Name}, LEN({!$Record.Name}) - 1))
+)</expression>
+    </formulas>
+    <interviewLabel>Fix Capitalization on New Contacts and Opportunities {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Fix Capitalization on New Contacts and Opportunities</label>
+    <processMetadataValues>
+        <name>BuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processMetadataValues>
+        <name>CanvasMode</name>
+        <value>
+            <stringValue>AUTO_LAYOUT_CANVAS</stringValue>
+        </value>
+    </processMetadataValues>
+    <processMetadataValues>
+        <name>OriginBuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processType>AutoLaunchedFlow</processType>
+    <recordUpdates>
+        <name>Correct_Capitalization_Contact</name>
+        <label>Correct Capitalization on Contact</label>
+        <locationX>50</locationX>
+        <locationY>539</locationY>
+        <inputAssignments>
+            <field>FirstName</field>
+            <value>
+                <elementReference>CorrectCapsFirstName</elementReference>
+            </value>
+        </inputAssignments>
+        <inputAssignments>
+            <field>LastName</field>
+            <value>
+                <elementReference>CorrectCapsLastName</elementReference>
+            </value>
+        </inputAssignments>
+        <inputReference>$Record.Auto_Shopper__r</inputReference>
+    </recordUpdates>
+    <recordUpdates>
+        <name>Correct_Capitalization_Opp</name>
+        <label>Correct Capitalization on Opportunity</label>
+        <locationX>50</locationX>
+        <locationY>431</locationY>
+        <connector>
+            <targetReference>Correct_Capitalization_Contact</targetReference>
+        </connector>
+        <inputAssignments>
+            <field>Name</field>
+            <value>
+                <elementReference>CorrectCapsFullName</elementReference>
+            </value>
+        </inputAssignments>
+        <inputReference>$Record</inputReference>
+    </recordUpdates>
+    <start>
+        <locationX>56</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>Check_if_All_Caps</targetReference>
+        </connector>
+        <object>Opportunity</object>
+        <recordTriggerType>CreateAndUpdate</recordTriggerType>
+        <triggerType>RecordAfterSave</triggerType>
+    </start>
+    <status>Obsolete</status>
+</Flow>

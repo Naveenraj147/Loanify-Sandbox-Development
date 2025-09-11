@@ -49,7 +49,7 @@ public void processPortalMessages(List<Contact> newContactList){
                 each.Is_Pending__c = false;
             }
             update pmList;
-
+            TriggerAPIService.logTriggerEvent('SF_DML_UPDATE18', 'SF17', UserInfo.getUserName(), null);
         }
     }
     if(dealerAccIds.size() > 0){
@@ -60,6 +60,7 @@ public void processPortalMessages(List<Contact> newContactList){
                 each.Dealer_Email_Available__c = true;
             }
             update garageList; 
+            TriggerAPIService.logTriggerEvent('SF_DML_UPDATE16', 'SF15', UserInfo.getUserName(), null);
         }
 
         List<Portal_Message__c> pmList = [SELECT id, Is_Pending__c  FROM Portal_Message__c 
@@ -69,6 +70,7 @@ public void processPortalMessages(List<Contact> newContactList){
                 each.Is_Pending__c = false;
             }
             update pmList;
+            TriggerAPIService.logTriggerEvent('SF_DML_UPDATE17', 'SF15', UserInfo.getUserName(), null);
 
         }
     }
@@ -87,7 +89,7 @@ public void processPMforContactUpdate(List<Contact> newContactList, Map<Id,Conta
         else if((con.Active__c == false && oldContactMap.get(con.Id).Active__c != con.Active__c) || (con.Member_Response_Notification__c == false && oldContactMap.get(con.Id).Member_Response_Notification__c != con.Member_Response_Notification__c)){
             accIds.add(con.AccountId);
         }
-        if(con.App_Downloaded__c != null && con.App_Downloaded__c != oldContactMap.get(con.Id).App_Downloaded__c && con.RecordTypeId == autoShopperRecordTypeId ){
+        if(con.App_Downloaded__c != null && con.App_Downloaded__c != oldContactMap.get(con.Id).App_Downloaded__c && con.Member_Type__c == 'Auto Shopper (M1)' ){
             appDownloadedMembers.add(con.Id);
         }
     }
@@ -142,7 +144,7 @@ public void sendSMSandEmail(Set<Id> contactList){
     Set<Id> memberIds = new Set<Id>();
     List<Messaging.SingleEmailMessage> emailList = new  List<Messaging.SingleEmailMessage>();
     String dealerportalURL = system.label.Dealer_Portal_Page_URL;
-    List<Opportunity> oppList = [SELECT Id, Bank_Service_Rep_Name_MSR__c, Bank_Service_Rep_Name_MSR__r.Email, Bank_Service_Rep_Name_MSR__r.FastPass_Team_Email_Support__c, Mobile__c, Auto_Shopper__r.RecordTypeId, Auto_Shopper__c FROM Opportunity WHERE Auto_Shopper__c =: contactList AND IsClosed = false Order By CreatedDate desc ];
+    List<Opportunity> oppList = [SELECT Id, Bank_Service_Rep_Name_MSR__c, Bank_Service_Rep_Name_MSR__r.Email, Bank_Service_Rep_Name_MSR__r.FastPass_Team_Email_Support__c, Mobile__c, Auto_Shopper__r.RecordTypeId, Auto_Shopper__c, Auto_Shopper__r.Member_Type__c FROM Opportunity WHERE Auto_Shopper__c =: contactList AND IsClosed = false Order By CreatedDate desc ];
     for(Opportunity eachOpp : oppList){ 
         if(!memberIds.contains(eachOpp.Auto_Shopper__c)){
             if(eachOpp.Bank_Service_Rep_Name_MSR__c != null && eachOpp.Bank_Service_Rep_Name_MSR__r.Email != null && emailTemplate != null && eachOpp.Bank_Service_Rep_Name_MSR__r.FastPass_Team_Email_Support__c == false){
@@ -171,11 +173,12 @@ public void sendSMSandEmail(Set<Id> contactList){
                    
             }
             if(smsTempList.size() > 0){
-                if(eachOpp.Auto_Shopper__r.RecordTypeId == autoShopperRecordTypeId  && (eachOpp.Mobile__c != null || eachOpp.Phone__c != null)) {
+                if(eachOpp.Auto_Shopper__r.Member_Type__c == 'Auto Shopper (M1)'  && (eachOpp.Mobile__c != null || eachOpp.Phone__c != null)) {
                     system.debug('Inside SMS Sending ');
                     String phoneField = eachOpp.Mobile__c != null ? eachOpp.Mobile__c : eachOpp.Phone__c;
                     tdc_tsw.GlobalSMSSender.sendSmsWithPhoneAPiAndTemplateId(phoneField,smsTempList[0].Id,eachOpp.Id);
                 }
+                TriggerAPIService.logTriggerEvent('MSG_TXT_MBR4', 'SF18', UserInfo.getUserName(), null);
             }
             memberIds.add(eachOpp.Auto_Shopper__c);
         }
@@ -188,23 +191,28 @@ public void sendSMSandEmail(Set<Id> contactList){
 }
 
 public void syncDataInAzure(Map<Id,Contact> newContactMap, Map<Id,Contact> oldContactMap){
-    List<Contact> conList = [select Id,Name,MobilePhone,Phone,RecordTypeId,RecordType.DeveloperName from Contact where Id in: newContactMap.keySet()];
+    List<Contact> conList = [select Id,Name,MobilePhone,Phone,RecordTypeId,RecordType.DeveloperName, Member_Type__c from Contact where Id in: newContactMap.keySet()];
         System.debug('ConList Size::'+ conList.Size());
         List<String> serializedDataList = new List<String> ();
-        
+        Boolean isPhoneUpdated;
         for(Contact each : conList){
             if ( each.RecordType.DeveloperName == 'Bank_Service_Rep' || each.RecordType.DeveloperName == 'Auto_Dealer_Pro'){
                 String serializedData =AzureIntegrationService.serializeWithNulls(newContactMap.get(each.Id)); 
                 serializedDataList.add(serializedData);
-            }else if (each.RecordType.DeveloperName == 'Auto_Shopper' && oldContactMap != null && (oldContactMap.get(each.Id).MobilePhone != each.MobilePhone || oldContactMap.get(each.Id).Phone != each.Phone)){
+            }else if (each.Member_Type__c == 'Auto Shopper (M1)' && oldContactMap != null && (oldContactMap.get(each.Id).MobilePhone != each.MobilePhone || oldContactMap.get(each.Id).Phone != each.Phone)){
                 String serializedData = serializePhoneField(each.MobilePhone, each.Phone, each.Id); 
                 serializedDataList.add(serializedData);
+                isPhoneUpdated = true;
             }
             
         }
         if(!serializedDataList.isEmpty()){
             System.debug('serializedDataList Size::'+ serializedDataList.Size());
             AzureIntegrationService.updateDataInAzure(serializedDataList);
+            if(isPhoneUpdated == true){
+                 TriggerAPIService.logTriggerEvent('SYC_AZURE5', 'SF19', UserInfo.getUserName(), null);
+
+            }
         }
 }
 
